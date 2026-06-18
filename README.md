@@ -1,7 +1,7 @@
 # Proctor — Exam Monitoring Chrome Extension
 
 ## Overview
-One-paragraph summary (can copy from proposal)
+Lightweight Chrome extension for monitoring student behavior during online exam sessions
 
 ## Tech Stack
 - Chrome Extension (MV3, TypeScript)
@@ -10,11 +10,13 @@ One-paragraph summary (can copy from proposal)
 - Infra: Docker Compose, Nginx, GitHub Actions
 
 ## Project Structure
+```
 proctor/
 ├── extension/       # Chrome Extension (MV3)
 ├── dashboard/       # React instructor dashboard
 ├── backend/         # NestJS API + Socket.IO
 └── docker/          # Compose files, Nginx config
+```
 
 ## Getting Started
 ### Prerequisites
