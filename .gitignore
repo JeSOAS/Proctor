@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Docker volumes (shouldn't be committed)
+docker/data/
