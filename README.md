@@ -25,7 +25,16 @@ proctor/
 - Chrome browser
 
 ### Running locally
-...
+Backend Setup (NestJS)
+
+cd backend
+npm install
+
+Run backend:
+npm run start:dev
+
+Backend runs at:
+http://localhost:3000
 
 ## Environment Variables
 ...
