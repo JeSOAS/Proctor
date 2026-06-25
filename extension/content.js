@@ -38,6 +38,10 @@ function send(type, payload = {}) {
 // Throttle mousemove so we don't flood the console
 document.addEventListener('mousemove', throttle((e) => {
   console.log('[Proctor/cs] mousemove', { x: e.clientX, y: e.clientY });
+  storeLocal("mousemove", {
+    x: e.clientX,
+    y: e.clientY
+  });
 }, 500));
 
 document.addEventListener('click', (e) => {
@@ -46,6 +50,11 @@ document.addEventListener('click', (e) => {
     y: e.clientY,
     target: e.target?.tagName,
     button: e.button
+  });
+  storeLocal("click", {
+    x: e.clientX,
+    y: e.clientY,
+    target: e.target?.tagName
   });
 });
 
@@ -64,24 +73,34 @@ document.addEventListener('keydown', (e) => {
     alt: e.altKey,
     meta: e.metaKey
   });
+  storeLocal("keydown", {
+    key: e.key,
+    code: e.code
+  });
 });
 
 // ---------- Clipboard ----------
 
 document.addEventListener('copy', () => {
   console.log('[Proctor/cs] copy');
+
   send('COPY', { url: location.href });
+
+  storeLocal("copy");
 });
 
 document.addEventListener('paste', () => {
   console.log('[Proctor/cs] paste');
   send('PASTE', { url: location.href });
+  storeLocal("paste");
 });
 
 document.addEventListener('cut', () => {
   console.log('[Proctor/cs] cut');
   send('CUT', { url: location.href });
+  storeLocal("cut");
 });
+
 
 // ---------- Focus / visibility ----------
 
@@ -96,6 +115,10 @@ window.addEventListener('blur', () => {
 document.addEventListener('visibilitychange', () => {
   console.log('[Proctor/cs] visibilitychange →', document.visibilityState);
   send('VISIBILITY', { state: document.visibilityState, url: location.href });
+  storeLocal("visibility", {
+    state: document.visibilityState
+  });
+
 });
 
 // ---------- Page lifecycle ----------
@@ -103,3 +126,17 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('beforeunload', () => {
   console.log('[Proctor/cs] beforeunload');
 });
+function storeLocal(type, data = {}) {
+  fetch("http://localhost:3000/logs", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      type,
+      data,
+      time: Date.now(),
+      url: location.href
+    })
+  });
+}
