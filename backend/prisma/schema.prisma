@@ -1,19 +1,43 @@
-// Prisma schema — intentionally minimal for Week 2.
-// Real models (Session, Student, Violation, Instructor, ExamConfig) will be
-// added in Week 3+ once the data flow is decided.
+// Local development runs on SQLite (zero-install, file-based).
+// Production on the Linux VM will switch provider to "postgresql" and use
+// docker/docker-compose.yml — at that point `status` can become an enum and
+// `payload` a native Json column (SQLite supports neither in Prisma).
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
-/// Placeholder so `prisma migrate dev` succeeds.
-/// Replace with real models once schema design is finalised.
-model HealthCheck {
-  id        Int      @id @default(autoincrement())
-  createdAt DateTime @default(now())
+/// One monitoring session — created when the extension starts up,
+/// ended explicitly via the API. Every recorded event belongs to a session.
+model Session {
+  id         String      @id @default(cuid())
+  status     String      @default("ACTIVE") // ACTIVE | ENDED
+  startedAt  DateTime    @default(now())
+  endedAt    DateTime?
+  /// Bumped by every heartbeat/violation. ACTIVE sessions whose lastSeenAt is
+  /// older than the stale timeout are auto-marked ENDED (browser was closed —
+  /// MV3 workers die without a shutdown event, so we can't report it directly).
+  lastSeenAt DateTime    @default(now())
+  userAgent  String?
+  violations Violation[]
+}
+
+/// A monitoring event reported by the extension (tab switch, focus loss,
+/// clipboard use, ...). `type` is a free string so new event types don't
+/// require a migration; `payload` holds type-specific details as JSON text.
+model Violation {
+  id         Int      @id @default(autoincrement())
+  session    Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId  String
+  type       String
+  url        String?
+  payload    String?
+  occurredAt DateTime @default(now())
+
+  @@index([sessionId, occurredAt])
 }

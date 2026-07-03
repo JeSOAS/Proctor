@@ -1,44 +1,41 @@
 # Proctor — Exam Monitoring Chrome Extension
 
-## Overview
-Lightweight Chrome extension for monitoring student behavior during online exam sessions
-
-## Tech Stack
-- Chrome Extension (MV3, TypeScript)
-- Backend: NestJS + Prisma + PostgreSQL + Redis
-- Dashboard: React 18 + TailwindCSS + shadcn/ui
-- Infra: Docker Compose, Nginx, GitHub Actions
+Lightweight Chrome extension for monitoring student behavior during online exam sessions, with a NestJS backend that records monitoring events. Senior Project 2.
 
 ## Project Structure
+
 ```
 proctor/
-├── extension/       # Chrome Extension (MV3)
-├── dashboard/       # React instructor dashboard
-├── backend/         # NestJS API + Socket.IO
-└── docker/          # Compose files, Nginx config
+├── extension/       # Chrome Extension (MV3) — see extension/README.md
+├── backend/         # NestJS API + Prisma — see backend/README.md
+├── docker/          # docker-compose (PostgreSQL + Redis) for the VM deployment
+└── TESTING.md       # manual test checklist for the monitoring logic
 ```
 
-## Getting Started
-### Prerequisites
-- Node.js 20+
-- Docker + Docker Compose
-- Chrome browser
+An instructor dashboard (React) is planned for a later phase. Local development
+uses SQLite (no Docker needed); the compose file is for the production Linux VM.
 
-### Running locally
-Backend Setup (NestJS)
+## Prerequisites
 
+- Node.js 22 LTS (minimum 20.11)
+- Chrome
+
+## Quick Start
+
+```bash
+# 1. Start the backend (creates the SQLite database on first run)
 cd backend
 npm install
+cp .env.example .env
+npm run prisma:migrate
+npm run start:dev        # http://localhost:3000
 
-Run backend:
-npm run start:dev
-
-Backend runs at:
-http://localhost:3000
-
-## Environment Variables
-...
+# 2. Load the extension
+#    chrome://extensions → Developer mode → Load unpacked → select extension/
+#    The extension creates a session automatically and starts reporting events.
+```
 
 ## Team
+
 - Aleksandr Romanov (6530338)
 - Mya Wut Ye Phoo (6530232)

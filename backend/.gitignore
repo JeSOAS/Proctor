@@ -4,5 +4,5 @@ dist/
 *.log
 .DS_Store
 
-# Prisma
-prisma/migrations/dev.db*
+# Prisma — local SQLite database
+prisma/dev.db*
