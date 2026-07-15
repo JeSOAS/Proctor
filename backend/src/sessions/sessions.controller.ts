@@ -1,25 +1,11 @@
-import { Body, Controller, Delete, Get, Headers, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { SessionsService } from './sessions.service';
 
+// Session lifecycle endpoints. Sessions are CREATED by registering into an
+// exam (POST /exams/:code/register) — there is no anonymous session creation.
 @Controller('sessions')
 export class SessionsController {
   constructor(private readonly sessionsService: SessionsService) {}
-
-  @Post()
-  create(@Headers('user-agent') userAgent?: string) {
-    return this.sessionsService.createSession(userAgent);
-  }
-
-  @Get()
-  list() {
-    return this.sessionsService.listSessions();
-  }
-
-  // Dev helper — wipe everything. Remove before any real deployment.
-  @Delete()
-  clearAll() {
-    return this.sessionsService.clearAll();
-  }
 
   @Post(':id/end')
   end(@Param('id') id: string) {

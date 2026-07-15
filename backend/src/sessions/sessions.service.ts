@@ -10,23 +10,9 @@ const STALE_TIMEOUT_MS = 90_000;
 export class SessionsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  createSession(userAgent?: string) {
-    return this.prisma.session.create({
-      data: { userAgent },
-    });
-  }
-
-  async listSessions() {
-    await this.expireStaleSessions();
-    return this.prisma.session.findMany({
-      orderBy: { startedAt: 'desc' },
-      include: { _count: { select: { violations: true } } },
-    });
-  }
-
   async endSession(id: string) {
     await this.ensureSessionExists(id);
-    return this.prisma.session.update({
+    return this.prisma.studentSession.update({
       where: { id },
       data: { status: 'ENDED', endedAt: new Date() },
     });
@@ -69,20 +55,16 @@ export class SessionsService {
     }));
   }
 
-  /// Dev helper: wipe all sessions (violations cascade with them).
-  async clearAll() {
-    const { count } = await this.prisma.session.deleteMany({});
-    return { deletedSessions: count };
-  }
-
-  private async expireStaleSessions() {
+  /// Mark ACTIVE sessions whose heartbeat has gone stale as ENDED. Called by
+  /// the exams read paths so the instructor view reflects who is really live.
+  async expireStale() {
     const cutoff = new Date(Date.now() - STALE_TIMEOUT_MS);
-    const stale = await this.prisma.session.findMany({
+    const stale = await this.prisma.studentSession.findMany({
       where: { status: 'ACTIVE', lastSeenAt: { lt: cutoff } },
       select: { id: true, lastSeenAt: true },
     });
     for (const s of stale) {
-      await this.prisma.session.update({
+      await this.prisma.studentSession.update({
         where: { id: s.id },
         data: { status: 'ENDED', endedAt: s.lastSeenAt },
       });
@@ -91,9 +73,9 @@ export class SessionsService {
 
   /// Bump lastSeenAt; 404 if the session doesn't exist OR is already ENDED.
   /// The 404 tells the extension its stored session is unusable, so it
-  /// creates a fresh one instead of writing into a closed session.
+  /// re-registers instead of writing into a closed session.
   private async touchSession(id: string) {
-    const { count } = await this.prisma.session.updateMany({
+    const { count } = await this.prisma.studentSession.updateMany({
       where: { id, status: 'ACTIVE' },
       data: { lastSeenAt: new Date() },
     });
@@ -103,7 +85,7 @@ export class SessionsService {
   }
 
   private async ensureSessionExists(id: string) {
-    const session = await this.prisma.session.findUnique({ where: { id } });
+    const session = await this.prisma.studentSession.findUnique({ where: { id } });
     if (!session) {
       throw new NotFoundException(`Session ${id} not found`);
     }

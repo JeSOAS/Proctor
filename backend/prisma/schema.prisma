@@ -1,7 +1,7 @@
 // Local development runs on SQLite (zero-install, file-based).
-// Production on the Linux VM will switch provider to "postgresql" and use
-// docker/docker-compose.yml — at that point `status` can become an enum and
-// `payload` a native Json column (SQLite supports neither in Prisma).
+// Production on the Oracle Ubuntu VM switches provider to "postgresql" and uses
+// docker/docker-compose.yml — at that point the string status/type fields can
+// become enums and `payload` a native Json column (SQLite supports neither).
 
 generator client {
   provider = "prisma-client-js"
@@ -12,32 +12,50 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// One monitoring session — created when the extension starts up,
-/// ended explicitly via the API. Every recorded event belongs to a session.
-model Session {
-  id         String      @id @default(cuid())
-  status     String      @default("ACTIVE") // ACTIVE | ENDED
-  startedAt  DateTime    @default(now())
-  endedAt    DateTime?
+/// An exam session created by an instructor. `joinCode` is the short token a
+/// student enters (later: embedded in a link/QR) to register into this exam.
+model Exam {
+  id          String           @id @default(cuid())
+  title       String
+  joinCode    String           @unique
+  status      String           @default("OPEN") // DRAFT | OPEN | CLOSED
+  maxWarnings Int              @default(3)
+  createdAt   DateTime         @default(now())
+  sessions    StudentSession[]
+}
+
+/// One student's participation in an exam. Created when the student registers
+/// with a join code; owns all monitoring events for that student.
+model StudentSession {
+  id          String      @id @default(cuid())
+  exam        Exam        @relation(fields: [examId], references: [id], onDelete: Cascade)
+  examId      String
+  studentName String
+  studentId   String? // optional university/student number
+  status      String      @default("ACTIVE") // ACTIVE | ENDED | DISCONNECTED
+  startedAt   DateTime    @default(now())
+  endedAt     DateTime?
   /// Bumped by every heartbeat/violation. ACTIVE sessions whose lastSeenAt is
   /// older than the stale timeout are auto-marked ENDED (browser was closed —
   /// MV3 workers die without a shutdown event, so we can't report it directly).
-  lastSeenAt DateTime    @default(now())
-  userAgent  String?
-  violations Violation[]
+  lastSeenAt  DateTime    @default(now())
+  userAgent   String?
+  violations  Violation[]
+
+  @@index([examId])
 }
 
 /// A monitoring event reported by the extension (tab switch, focus loss,
 /// clipboard use, ...). `type` is a free string so new event types don't
 /// require a migration; `payload` holds type-specific details as JSON text.
 model Violation {
-  id         Int      @id @default(autoincrement())
-  session    Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  id         Int            @id @default(autoincrement())
+  session    StudentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   sessionId  String
   type       String
   url        String?
   payload    String?
-  occurredAt DateTime @default(now())
+  occurredAt DateTime       @default(now())
 
   @@index([sessionId, occurredAt])
 }

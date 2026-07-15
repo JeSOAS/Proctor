@@ -6,14 +6,14 @@
   <style>
     body {
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-      width: 240px;
+      width: 260px;
       padding: 14px;
       margin: 0;
       color: #1f2937;
     }
     h1 {
       font-size: 14px;
-      margin: 0 0 8px 0;
+      margin: 0 0 10px 0;
       display: flex;
       align-items: center;
     }
@@ -22,25 +22,72 @@
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      background: #22c55e;
+      background: #9ca3af;
       margin-right: 8px;
     }
-    p {
-      font-size: 12px;
-      color: #6b7280;
-      margin: 0 0 6px 0;
-      line-height: 1.4;
-    }
-    code {
-      background: #f3f4f6;
-      padding: 1px 4px;
-      border-radius: 3px;
+    .dot.live { background: #22c55e; }
+    label {
+      display: block;
       font-size: 11px;
+      font-weight: 600;
+      color: #374151;
+      margin: 8px 0 3px;
     }
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 6px 8px;
+      font-size: 13px;
+      border: 1px solid #d1d5db;
+      border-radius: 5px;
+    }
+    input#code { text-transform: uppercase; letter-spacing: 2px; font-weight: 600; }
+    button {
+      width: 100%;
+      margin-top: 12px;
+      padding: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #fff;
+      background: #2563eb;
+      border: 0;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover { background: #1d4ed8; }
+    button.secondary { background: #6b7280; }
+    button.secondary:hover { background: #4b5563; }
+    button:disabled { background: #93c5fd; cursor: default; }
+    p { font-size: 12px; color: #6b7280; margin: 6px 0 0; line-height: 1.4; }
+    .error { color: #dc2626; font-size: 12px; margin-top: 8px; min-height: 14px; }
+    .row { font-size: 12px; margin: 4px 0; }
+    .row b { color: #111827; }
+    .hidden { display: none; }
   </style>
 </head>
 <body>
-  <h1><span class="dot"></span>Proctor active</h1>
-  <p>Monitoring is running. Press <code>F12</code> on any tab to see the event log in the page console, or inspect the service worker from <code>chrome://extensions</code>.</p>
+  <!-- Join view -->
+  <div id="join-view">
+    <h1><span class="dot"></span>Join an exam</h1>
+    <label for="name">Full name</label>
+    <input id="name" type="text" autocomplete="name" placeholder="e.g. Alice Tan">
+    <label for="studentId">Student ID (optional)</label>
+    <input id="studentId" type="text" placeholder="e.g. 6530001">
+    <label for="code">Join code</label>
+    <input id="code" type="text" maxlength="6" placeholder="XXXXXX">
+    <button id="join">Join exam</button>
+    <div id="error" class="error"></div>
+  </div>
+
+  <!-- Active view -->
+  <div id="active-view" class="hidden">
+    <h1><span class="dot live"></span>Monitoring active</h1>
+    <div class="row">Exam: <b id="a-exam"></b></div>
+    <div class="row">Student: <b id="a-student"></b></div>
+    <p>Your activity is being monitored for academic integrity while this exam is in progress.</p>
+    <button id="leave" class="secondary">Leave exam</button>
+  </div>
+
+  <script src="popup.js"></script>
 </body>
 </html>

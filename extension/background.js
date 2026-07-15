@@ -1,60 +1,62 @@
 // Background service worker
 // ----------------------------------------------------------------
-// Single reporting path to the backend. On startup it creates (or reuses)
-// a monitoring session, then records every tab/window event as a violation
-// row via the REST API. Content scripts forward their events here.
+// Records tab/window events for a student who has JOINED an exam. The student
+// registers in the popup (name + join code); the popup stores the resulting
+// `enrollment` ({ sessionId, examTitle, ... }) in chrome.storage.local. Until
+// that exists, this worker does nothing — no monitoring before the student joins.
 //
-// A heartbeat pings the backend every 30s; when the browser closes, the
-// beats stop and the backend auto-marks the session ENDED (MV3 workers are
-// killed without any shutdown event we could report from).
+// A heartbeat pings the backend every 30s; when the browser closes the beats
+// stop and the backend auto-marks the session ENDED (MV3 workers are killed
+// without any shutdown event we could report from).
 //
 // To view this log:
 //   chrome://extensions  →  Proctor  →  click "service worker" link  →  Console tab
 // ----------------------------------------------------------------
 
-const API_BASE = 'http://localhost:3000';
+// ⚠️ CHANGE THIS to the production backend URL before Chrome Web Store submission.
+//    Must match DEFAULT_API_BASE in popup.js.
+const DEFAULT_API_BASE = 'http://localhost:3000';
 const HEARTBEAT_PERIOD_MINUTES = 0.5;
 
 console.log('[Proctor/bg] Service worker started at', new Date().toISOString());
 
-// ---------- Session handling ----------
-//
-// The worker is restarted by Chrome whenever it goes idle, so the session id
-// is kept in chrome.storage.local rather than a variable. The in-flight
-// promise is memoized: at startup many events fire at once, and without this
-// each of them would race through "storage is empty → create a session",
-// producing several parallel sessions.
+// ---------- Shared state (chrome.storage.local) ----------
 
-let sessionIdPromise = null;
-
-function getSessionId(forceNew = false) {
-  if (forceNew || !sessionIdPromise) {
-    sessionIdPromise = (async () => {
-      if (!forceNew) {
-        const { sessionId } = await chrome.storage.local.get('sessionId');
-        if (sessionId) return sessionId;
-      }
-      const res = await fetch(`${API_BASE}/sessions`, { method: 'POST' });
-      if (!res.ok) throw new Error(`POST /sessions → ${res.status}`);
-      const session = await res.json();
-      await chrome.storage.local.set({ sessionId: session.id });
-      console.log('[Proctor/bg] session started:', session.id);
-      return session.id;
-    })();
-    // If creation failed (backend down), allow the next caller to retry
-    sessionIdPromise.catch(() => {
-      sessionIdPromise = null;
-    });
-  }
-  return sessionIdPromise;
+async function apiBase() {
+  const { apiBase } = await chrome.storage.local.get('apiBase');
+  return apiBase || DEFAULT_API_BASE;
 }
 
+async function getEnrollment() {
+  const { enrollment } = await chrome.storage.local.get('enrollment');
+  return enrollment || null;
+}
+
+async function clearEnrollment() {
+  await chrome.storage.local.remove('enrollment');
+  console.log('[Proctor/bg] enrollment cleared — monitoring stopped');
+}
+
+// ---------- Reporting ----------
+//
+// Every event flows through here. If the student has not joined an exam, it is
+// a no-op — the extension is inert until enrollment exists.
+
 async function report(type, payload = {}) {
+  const enrollment = await getEnrollment();
+  if (!enrollment) return;
   try {
-    let res = await postViolation(await getSessionId(), type, payload);
+    const base = await apiBase();
+    const res = await fetch(`${base}/sessions/${enrollment.sessionId}/violations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, payload, url: payload.url, occurredAt: new Date().toISOString() }),
+    });
     if (res.status === 404) {
-      // Stored session no longer exists (backend DB was reset) — start over
-      res = await postViolation(await getSessionId(true), type, payload);
+      // Session ended server-side (exam closed, or timed out) — stop monitoring.
+      // The student must re-join from the popup to resume.
+      await clearEnrollment();
+      return;
     }
     if (!res.ok) throw new Error(`POST violation → ${res.status}`);
     console.log('[Proctor/bg] recorded', type, payload);
@@ -63,21 +65,15 @@ async function report(type, payload = {}) {
   }
 }
 
-function postViolation(sessionId, type, payload) {
-  return fetch(`${API_BASE}/sessions/${sessionId}/violations`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type, payload, url: payload.url, occurredAt: new Date().toISOString() }),
-  });
-}
-
 // ---------- Heartbeat ----------
 
 async function sendHeartbeat() {
+  const enrollment = await getEnrollment();
+  if (!enrollment) return;
   try {
-    const sessionId = await getSessionId();
-    const res = await fetch(`${API_BASE}/sessions/${sessionId}/heartbeat`, { method: 'POST' });
-    if (res.status === 404) await getSessionId(true);
+    const base = await apiBase();
+    const res = await fetch(`${base}/sessions/${enrollment.sessionId}/heartbeat`, { method: 'POST' });
+    if (res.status === 404) await clearEnrollment();
   } catch (err) {
     console.warn('[Proctor/bg] heartbeat failed:', err.message);
   }
@@ -161,9 +157,17 @@ chrome.windows.onFocusChanged.addListener((windowId) => {
   }
 });
 
-// ---------- Messages from content script ----------
+// ---------- Messages ----------
+//
+// Control messages from the popup start with "__proctor_"; everything else is
+// a monitoring event forwarded by the content script.
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg && msg.type === '__proctor_enrolled') {
+    sendHeartbeat(); // begin monitoring immediately, don't wait for the next alarm
+    sendResponse({ ok: true });
+    return false;
+  }
   report(msg.type, { ...msg.payload, url: sender.tab?.url });
   sendResponse({ received: true });
   return false;

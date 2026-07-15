@@ -1,4 +1,4 @@
-# Manual Test Checklist — Week 4 Monitoring Logic
+# Manual Test Checklist — Monitoring + Session Management
 
 Run through this list after any change to the extension or backend. Mark each
 item and note the date + tester at the bottom.
@@ -10,23 +10,27 @@ item and note the date + tester at the bottom.
 - [ ] <http://localhost:3000/health> returns `{"status":"ok", ...}`
 - [ ] Extension loaded/reloaded at `chrome://extensions`, all open tabs refreshed
 
-## Session auto-connect (rector's requirement)
+## Create an exam + join (Week 7)
 
-- [ ] Open the service-worker console (`chrome://extensions` → Proctor → `service worker`)
-- [ ] It shows `[Proctor/bg] session started: <id>` — note the id
-- [ ] `GET http://localhost:3000/sessions` lists that session with status `ACTIVE`
+- [ ] Create an exam:
+      `curl -X POST http://localhost:3000/exams -H "Content-Type: application/json" -d "{\"title\":\"Test Exam\"}"`
+      → returns a `joinCode`
+- [ ] Click the Proctor toolbar icon → the popup shows a **Join an exam** form
+- [ ] Enter a name + the join code → **Join exam** → popup switches to
+      **Monitoring active** showing the exam title and your name
+- [ ] Wrong code → popup shows "No exam for code …"; empty name → "Enter your name."
+- [ ] `GET /exams/<examId>/sessions` lists your student session as `ACTIVE`
+- [ ] Before joining, the service-worker console records nothing (extension inert)
 
 ## Tab switching
 
-- [ ] Open two tabs and switch between them → each switch logs `recorded TAB_SWITCH`
+- [ ] Switch between two tabs → each switch logs `recorded TAB_SWITCH`
       with the `url` of the tab switched TO
-- [ ] Open a new tab → `TAB_CREATED` recorded (`chrome://newtab/` is correct —
-      that IS the tab's URL until you navigate)
-- [ ] Type a URL in that tab → `TAB_NAVIGATE` recorded with the real `url`
-      (and `from` in the payload showing where the tab was before)
+- [ ] Open a new tab → `TAB_CREATED` (`chrome://newtab/` is correct — that IS
+      the tab's URL until you navigate)
+- [ ] Type a URL in that tab → `TAB_NAVIGATE` with the real `url` (and `from`)
 - [ ] Navigating in a BACKGROUND tab records nothing (no clutter)
-- [ ] Navigate the tab somewhere, then close it → `TAB_CLOSED` recorded with the
-      `url` the tab had when it was closed
+- [ ] Navigate a tab somewhere, then close it → `TAB_CLOSED` with the `url` it had
 
 ## Window focus
 
@@ -35,37 +39,40 @@ item and note the date + tester at the bottom.
 - [ ] Minimize Chrome → `WINDOW_BLUR` recorded
 - [ ] Switching tabs records exactly ONE `TAB_SWITCH` (no duplicate visibility events)
 
-## Session lifecycle
-
-- [ ] While Chrome is open, `GET /sessions` shows the session `ACTIVE`
-      (heartbeat every 30s keeps `lastSeenAt` fresh)
-- [ ] Close Chrome completely, wait ~2 minutes, `GET /sessions` again →
-      session is `ENDED`, `endedAt` equals the last heartbeat time
-- [ ] Reopen Chrome → a NEW single session is created (exactly one, not two)
-
 ## Clipboard
 
-- [ ] Copy text on any page → `COPY` recorded
-- [ ] Paste text into a text field → `PASTE` recorded
+- [ ] Copy text on a page → `COPY` recorded
+- [ ] Paste into a field → `PASTE` recorded
 - [ ] Cut text → `CUT` recorded
+
+## Session lifecycle
+
+- [ ] While joined, `GET /exams/<examId>/sessions` shows the session `ACTIVE`
+      (heartbeat every 30s keeps `lastSeenAt` fresh)
+- [ ] Click **Leave exam** → session becomes `ENDED`; popup returns to the join form
+- [ ] Re-join → a new `ACTIVE` session appears (the old one stays `ENDED`)
+- [ ] Close Chrome completely while joined, wait ~2 min, list sessions →
+      the session is `ENDED`, `endedAt` ≈ the last heartbeat
+- [ ] Close the exam (`POST /exams/<examId>/status {"status":"CLOSED"}`), then try
+      to join with the code → popup shows "… is not open for registration"
 
 ## Events persisted in the database
 
-- [ ] `GET http://localhost:3000/sessions/<id>/violations` returns all events above,
-      in order, with correct `type`, `url`, and `occurredAt` timestamps
+- [ ] `GET /sessions/<sessionId>/violations` returns all events above, in order,
+      with correct `type`, `url`, and `occurredAt` timestamps
 - [ ] Same rows visible in `npm run prisma:studio` (Violation table)
 
 ## Resetting between test runs
 
-Wipe all recorded sessions/violations before a fresh run:
+Wipe all exams, sessions and violations:
 
 ```bash
-curl -X DELETE http://localhost:3000/sessions
+curl -X DELETE http://localhost:3000/exams
 ```
 
 (or delete rows in `npm run prisma:studio`, or `npx prisma migrate reset` for a
-full wipe). Also clear the extension's stored session id by reloading the
-extension at `chrome://extensions` — or it will keep reporting into the old id.
+full wipe). Also click **Leave exam** (or reload the extension) to clear the
+stored enrollment — otherwise it keeps reporting into a now-deleted session.
 
 ## Failure behavior
 
