@@ -1,33 +1,49 @@
+# Production stack for the Oracle VM (also usable locally with Docker).
+# Secrets come from docker/.env (see docker/.env.example) — never commit it.
+#
+# Security posture:
+#   - Postgres has NO published ports; it is reachable only by the backend on
+#     the internal Docker network. It is never exposed to the internet.
+#   - The backend binds to 127.0.0.1 on the VM, so it is not directly reachable
+#     from outside. Public HTTPS access is added in the next step via Cloudflare
+#     Tunnel (cloudflared), which connects out and proxies to backend:3000.
+#   - Redis from the old scaffold is removed — nothing uses it yet. Re-add it in
+#     the real-time phase (see docs/DECISIONS.md).
+
 services:
-  postgres:
+  db:
     image: postgres:16-alpine
     container_name: proctor-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: proctor
-      POSTGRES_PASSWORD: proctor
-      POSTGRES_DB: proctor
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-proctor}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in docker/.env}
+      POSTGRES_DB: ${POSTGRES_DB:-proctor}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U proctor"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-proctor}"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
 
-  redis:
-    image: redis:7-alpine
-    container_name: proctor-redis
+  backend:
+    build:
+      context: ../backend
+    container_name: proctor-backend
     restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-proctor}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-proctor}?schema=public
+      PORT: 3000
+      # Required in production — protects instructor/destructive endpoints.
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN in docker/.env}
+    depends_on:
+      db:
+        condition: service_healthy
+    # Bind to the VM's loopback only. The tunnel (next step) reaches it here;
+    # the internet cannot. For a quick local test on the VM: curl 127.0.0.1:3000/health
     ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+      - "127.0.0.1:3000:3000"
 
 volumes:
   postgres_data:

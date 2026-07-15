@@ -5,9 +5,8 @@ NestJS API that receives and stores monitoring events from the Chrome extension.
 ## Stack
 
 - NestJS 11 (REST)
-- Prisma 6 → **SQLite** for local development (file at `prisma/dev.db`, zero install)
-- Production (Oracle Ubuntu 22.04 VM): switch the Prisma provider to `postgresql`
-  and use `docker/docker-compose.yml` (PostgreSQL 16 + Redis 7)
+- Prisma 6 → **PostgreSQL 16**
+- Docker Compose for the whole stack (`docker/docker-compose.yml`)
 
 ## Data model
 
@@ -15,18 +14,26 @@ NestJS API that receives and stores monitoring events from the Chrome extension.
 - **StudentSession** — one student's participation in an exam (created on register).
 - **Violation** — a monitoring event belonging to a StudentSession.
 
-## Setup
+See [../docs/DECISIONS.md](../docs/DECISIONS.md) for why the model and stack are shaped this way.
+
+## Run it
+
+**With Docker (recommended — matches production).** Full runbook in
+[../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md). In short, from `docker/`:
+
+```bash
+cp .env.example .env          # set POSTGRES_PASSWORD and ADMIN_TOKEN
+docker compose up -d --build
+curl http://127.0.0.1:3000/health
+```
+
+**Without Docker** (needs a reachable PostgreSQL):
 
 ```bash
 cd backend
 npm install
-cp .env.example .env
-npm run prisma:migrate   # creates prisma/dev.db and applies migrations
-```
-
-## Run
-
-```bash
+cp .env.example .env          # set DATABASE_URL to your Postgres
+npm run prisma:migrate        # apply migrations
 npm run start:dev
 ```
 
@@ -44,6 +51,10 @@ Health check: <http://localhost:3000/health>
 | `GET /exams/:id/sessions` | students registered in an exam, with violation counts |
 | `POST /exams/:id/status` | set exam status `{ status: OPEN \| CLOSED \| DRAFT }` |
 | `DELETE /exams` | **dev helper** — wipe all exams, sessions, violations |
+
+🔒 The instructor endpoints above require an `x-admin-token` header matching
+`ADMIN_TOKEN` whenever that is set (always set it in production). The student
+endpoints below are intentionally open — the extension calls them with no credential.
 
 **Registration + session lifecycle (student side / extension)**
 
@@ -89,7 +100,7 @@ extension talks to a remote server, the connected phase needs:
 
 ## Clearing recorded data
 
-- Wipe rows, keep schema: `curl -X DELETE http://localhost:3000/exams`
+- Wipe rows, keep schema: `curl -X DELETE http://localhost:3000/exams -H "x-admin-token: $ADMIN_TOKEN"`
 - Edit/delete individual rows: `npm run prisma:studio`
 - Full reset (drop + recreate + re-apply migrations): `npx prisma migrate reset`
 

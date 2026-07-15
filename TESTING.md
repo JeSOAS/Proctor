@@ -5,15 +5,15 @@ item and note the date + tester at the bottom.
 
 ## Setup
 
-- [ ] `cd backend && npm run prisma:migrate` — SQLite db exists at `backend/prisma/dev.db`
-- [ ] `npm run start:dev` — console shows `Backend listening on http://localhost:3000`
-- [ ] <http://localhost:3000/health> returns `{"status":"ok", ...}`
+- [ ] Backend running (locally via Docker, or on the VM — see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md))
+- [ ] `curl <backend>/health` returns `{"status":"ok", ...}`
+      (`<backend>` = `http://127.0.0.1:3000` locally, or your `https://…` tunnel URL)
 - [ ] Extension loaded/reloaded at `chrome://extensions`, all open tabs refreshed
 
 ## Create an exam + join (Week 7)
 
-- [ ] Create an exam:
-      `curl -X POST http://localhost:3000/exams -H "Content-Type: application/json" -d "{\"title\":\"Test Exam\"}"`
+- [ ] Create an exam (needs the admin token in production):
+      `curl -X POST <backend>/exams -H "Content-Type: application/json" -H "x-admin-token: $ADMIN_TOKEN" -d "{\"title\":\"Test Exam\"}"`
       → returns a `joinCode`
 - [ ] Click the Proctor toolbar icon → the popup shows a **Join an exam** form
 - [ ] Enter a name + the join code → **Join exam** → popup switches to

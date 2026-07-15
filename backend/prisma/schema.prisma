@@ -1,14 +1,18 @@
-// Local development runs on SQLite (zero-install, file-based).
-// Production on the Oracle Ubuntu VM switches provider to "postgresql" and uses
-// docker/docker-compose.yml — at that point the string status/type fields can
-// become enums and `payload` a native Json column (SQLite supports neither).
+// PostgreSQL — used both in production (Oracle VM, via docker/docker-compose.yml)
+// and for local development (run the same compose, or point DATABASE_URL at any
+// Postgres). We moved off SQLite because a real exam has ~dozens of students
+// writing events concurrently, which triggers SQLite write-lock errors.
+//
+// Models intentionally use plain String for `status`/`type`/`payload` rather
+// than Postgres enums / Json. That kept the switch from SQLite a zero-code-change
+// port; the next team may tighten these to enums + Json (see docs/DECISIONS.md).
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
