@@ -13,9 +13,10 @@
 //   chrome://extensions  →  Proctor  →  click "service worker" link  →  Console tab
 // ----------------------------------------------------------------
 
-// ⚠️ CHANGE THIS to the production backend URL before Chrome Web Store submission.
-//    Must match DEFAULT_API_BASE in popup.js.
-const DEFAULT_API_BASE = 'http://localhost:3000';
+// Production backend. To repoint the extension at a different server, change
+// this in BOTH background.js and popup.js, or override at runtime via
+// chrome.storage.local.apiBase (see docs/DECISIONS.md #8).
+const DEFAULT_API_BASE = 'https://proctor.jesoas.org';
 const HEARTBEAT_PERIOD_MINUTES = 0.5;
 
 console.log('[Proctor/bg] Service worker started at', new Date().toISOString());

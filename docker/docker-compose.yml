@@ -45,5 +45,19 @@ services:
     ports:
       - "127.0.0.1:3000:3000"
 
+  # Cloudflare Tunnel — public HTTPS with no open ports on the VM. Enabled only
+  # with the "tunnel" profile:  docker compose --profile tunnel up -d
+  # TUNNEL_TOKEN comes from Zero Trust → Networks → Tunnels → (your tunnel).
+  cloudflared:
+    profiles: ["tunnel"]
+    image: cloudflare/cloudflared:latest
+    container_name: proctor-cloudflared
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    depends_on:
+      - backend
+
 volumes:
   postgres_data:
