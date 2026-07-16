@@ -94,21 +94,22 @@ Migrations apply automatically on backend startup (`prisma migrate deploy`).
 Result: `https://proctor.jesoas.org` → the backend, with **no open ports** on the
 VM. This is the URL the extension calls.
 
-### 2.1 Add jesoas.org to Cloudflare (one-time, non-disruptive)
+### 2.1 Make sure the domain is on Cloudflare
 
-Cloudflare becomes your **DNS provider** — your website and email stay where they
-are.
+The tunnel needs `jesoas.org`'s DNS managed by Cloudflare.
 
-1. Create a free Cloudflare account → **Add a site** → `jesoas.org` → Free plan.
-2. Cloudflare scans and imports your current DNS records. **Verify the list
-   matches your existing DNS** — especially the apex `A`/`AAAA` (your site), the
-   `MX` records (email), and any `TXT` (SPF/DKIM/DMARC). Add anything missing.
-3. Leave every existing record **"DNS only"** (grey cloud) so nothing about the
-   current site/email changes.
-4. Copy Cloudflare's two nameservers and set them at your **registrar** (where
-   `jesoas.org` is registered), replacing the current ones.
-5. Wait until Cloudflare shows the domain **Active** (minutes to a few hours).
-   Because both old and new nameservers serve the same records, the site stays up.
+- **Already on Cloudflare (our case)** — it already has the `jesoas.org` / `www`
+  records in the Cloudflare DNS dashboard. Then there is **nothing to do here**:
+  do NOT re-add the domain, do NOT change nameservers. Skip to 2.2. Adding the
+  `proctor` subdomain later is a separate new record and does not touch the
+  existing ones.
+- **Not yet on Cloudflare** — add it (Cloudflare → *Add a site* → Free plan),
+  check that Cloudflare imported your existing records (apex/`www` `A`, any `MX`
+  email + `TXT`), keep them "DNS only", then set Cloudflare's two nameservers at
+  your registrar and wait for the domain to show **Active**.
+
+Note: the `proctor` record created in 2.4 is **proxied** (orange cloud) — the
+tunnel requires it. That is isolated to `proctor`; other records are unaffected.
 
 ### 2.2 Create the tunnel
 

@@ -66,6 +66,13 @@ endpoints below are intentionally open — the extension calls them with no cred
 | `POST /sessions/:id/violations` | record an event `{ type, url?, payload?, occurredAt? }` |
 | `GET /sessions/:id/violations` | list a session's events in order |
 | `POST /sessions/:id/end` | mark a session ENDED |
+| `GET /sessions/:id` | 🔒 read one session (student info, status, exam, counts) |
+| `PATCH /sessions/:id` | 🔒 update `{ studentName?, studentId?, status? }` |
+| `DELETE /sessions/:id` | 🔒 delete a session + its violations |
+
+The 🔒 session routes are instructor CRUD and require the `x-admin-token`. Student
+info (name, ID) lives on the session record, so these cover both. "Create" is
+registration (`POST /exams/:code/register`).
 
 Registration only succeeds while the exam is `OPEN`; a `CLOSED`/`DRAFT` exam
 returns 409. There is no anonymous session creation — every session belongs to

@@ -55,6 +55,66 @@ export class SessionsService {
     }));
   }
 
+  // ---- Session / student-info CRUD (instructor; guarded in the controller) ----
+  // "Create" is registration (POST /exams/:code/register). Student info
+  // (studentName, studentId) lives on the session record, so these cover both.
+
+  /// Read one session with its exam context and violation count.
+  async getSession(id: string) {
+    const session = await this.prisma.studentSession.findUnique({
+      where: { id },
+      include: {
+        exam: { select: { id: true, title: true, joinCode: true } },
+        _count: { select: { violations: true } },
+      },
+    });
+    if (!session) throw new NotFoundException(`Session ${id} not found`);
+    return session;
+  }
+
+  /// Update student info (name / id) and/or session status.
+  async updateSession(
+    id: string,
+    input: { studentName?: string; studentId?: string; status?: string },
+  ) {
+    await this.ensureSessionExists(id);
+    const data: {
+      studentName?: string;
+      studentId?: string | null;
+      status?: string;
+      endedAt?: Date | null;
+    } = {};
+
+    if (input.studentName !== undefined) {
+      if (!input.studentName.trim()) {
+        throw new BadRequestException('"studentName" cannot be empty');
+      }
+      data.studentName = input.studentName.trim();
+    }
+    if (input.studentId !== undefined) {
+      data.studentId = input.studentId?.trim() || null;
+    }
+    if (input.status !== undefined) {
+      const allowed = ['ACTIVE', 'ENDED', 'DISCONNECTED'];
+      if (!allowed.includes(input.status)) {
+        throw new BadRequestException(`status must be one of ${allowed.join(', ')}`);
+      }
+      data.status = input.status;
+      data.endedAt = input.status === 'ENDED' ? new Date() : null;
+    }
+    if (Object.keys(data).length === 0) {
+      throw new BadRequestException('nothing to update (studentName, studentId or status)');
+    }
+    return this.prisma.studentSession.update({ where: { id }, data });
+  }
+
+  /// Delete one session and its violations (cascade).
+  async deleteSession(id: string) {
+    await this.ensureSessionExists(id);
+    await this.prisma.studentSession.delete({ where: { id } });
+    return { deleted: true };
+  }
+
   /// Mark ACTIVE sessions whose heartbeat has gone stale as ENDED. Called by
   /// the exams read paths so the instructor view reflects who is really live.
   async expireStale() {
