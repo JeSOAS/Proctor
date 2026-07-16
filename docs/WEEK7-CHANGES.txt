@@ -1,0 +1,123 @@
+PROCTOR — WEEK 7 CHANGES (Session Management)
+Date: 16 July 2026
+
+------------------------------------------------------------
+OVERVIEW
+------------------------------------------------------------
+Week 7 was about "session management": letting an instructor create an exam,
+giving each exam a code that students use to join, registering each student,
+and saving all of that information. All four Week 7 goals are done. Along the
+way we also got the backend running online securely so the extension can talk
+to it for real. This file explains everything in plain language.
+
+
+------------------------------------------------------------
+THE FOUR WEEK 7 GOALS — ALL DONE
+------------------------------------------------------------
+1. Create exam sessions
+   An instructor can now create an exam (it has a title and a limit for how
+   many warnings a student gets). Each exam is saved in the database.
+
+2. Generate session IDs
+   Every exam automatically gets a short 6-character join code (for example
+   "N2RXER"). The code avoids confusing characters like the letter O and the
+   number 0 so students don't mistype it.
+
+3. Register student sessions
+   A student joins an exam by entering their name and the join code. This
+   creates that student's own "session" — their personal record for that exam.
+   Joining is refused if the exam has been closed.
+
+4. Save session information
+   Everything is stored in a real database (PostgreSQL). There are three kinds
+   of records:
+     - Exam            = the exam an instructor created
+     - StudentSession  = one student taking part in one exam (holds their name
+                         and student ID)
+     - Violation       = one monitoring event (a tab switch, losing focus, a
+                         copy/paste, etc.) belonging to a student session
+
+
+------------------------------------------------------------
+HOW THE EXTENSION CHANGED
+------------------------------------------------------------
+- The popup (the little window when you click the extension icon) is now a
+  "Join an exam" form: the student types their name, optional student ID, and
+  the join code, then clicks Join.
+- The extension does nothing until a student joins an exam. Before joining, it
+  records nothing at all.
+- Once joined, it shows "Monitoring active" and starts reporting events to the
+  backend. A "Leave exam" button stops it.
+- The extension now talks to the live backend at https://proctor.jesoas.org.
+
+
+------------------------------------------------------------
+WHAT WE BUILT TO MAKE IT WORK FOR REAL (BACKEND + HOSTING)
+------------------------------------------------------------
+- Moved the database from a simple file (SQLite) to a proper database
+  (PostgreSQL). A real exam has many students saving data at the same time, and
+  the simple file version can lock up under that load. PostgreSQL handles it.
+
+- Packaged the backend with Docker so it starts the same way on any machine
+  with one command, and set it up to create its database tables automatically.
+
+- Put the backend online securely at https://proctor.jesoas.org using a
+  Cloudflare Tunnel. This gives a secure "https" web address without opening any
+  ports on the server (safer and simpler).
+
+- Security measures:
+    * The database is not reachable from the internet at all — only the backend
+      can talk to it.
+    * Instructor actions (create/list/delete exams, view or edit student
+      sessions) require a secret token. Students joining and the extension
+      reporting events do not need it, but nobody can wipe or snoop on exams
+      without the token.
+
+
+------------------------------------------------------------
+EXTRA API COMMANDS ADDED (managing saved sessions/students)
+------------------------------------------------------------
+We added commands to read, edit, and remove a saved student session and its
+student information:
+    - Read one session (name, student ID, status, which exam, event count)
+    - Update a session (change the student's name/ID, or the status)
+    - Delete a session (and its events)
+These are instructor-only (they need the secret token).
+
+
+------------------------------------------------------------
+DOCUMENTATION ADDED (for the team taking over)
+------------------------------------------------------------
+- docs/DEPLOYMENT.md      step-by-step guide to run the backend on the server
+- docs/DECISIONS.md       why each design choice was made, and what was left out
+- docs/TESTING-COMMANDS.md ready-to-use test commands for Mac and Windows
+- PRIVACY.md              a plain, honest privacy policy for the extension
+- CHROME_STORE.md         notes for submitting the extension to the Chrome Store
+
+
+------------------------------------------------------------
+WHAT IS DONE vs LEFT FOR THE NEXT TEAM
+------------------------------------------------------------
+Done in this cycle:
+  - Instructors create exams; students join with a code; sessions and events
+    are saved.
+  - Backend is live, on a secure https address, with the database protected.
+  - Extension joins an exam and reports tab switches, focus changes, and
+    copy/paste in real time.
+
+Left on purpose (planned for later phases, not Week 7):
+  - Instructor dashboard (a web page to watch exams live) — for now the backend
+    is used through its API/commands.
+  - Live updates, automatic exam submission on too many warnings, in-browser
+    warning pop-ups.
+  - Detecting visits to banned websites (the URLs are already recorded; the
+    "is this banned?" check is not built yet).
+  - Instructor login accounts, and integration with Google/Microsoft Forms.
+
+
+------------------------------------------------------------
+WHERE IT LIVES
+------------------------------------------------------------
+- Source code:  https://github.com/JeSOAS/Proctor   (main branch)
+- Live backend: https://proctor.jesoas.org
+- Extension:    the "extension" folder in the repository
