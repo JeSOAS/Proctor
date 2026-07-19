@@ -11,6 +11,8 @@ import { SessionsService } from '../sessions/sessions.service';
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const CODE_LENGTH = 6;
 
+// Ownership is enforced through the chain Exam -> Course -> Teacher: every query
+// filters by the teacher, so a teacher can only ever touch their own exams.
 @Injectable()
 export class ExamsService {
   constructor(
@@ -18,40 +20,61 @@ export class ExamsService {
     private readonly sessions: SessionsService,
   ) {}
 
-  async createExam(input: { title?: string; maxWarnings?: number }) {
-    if (!input.title || typeof input.title !== 'string' || !input.title.trim()) {
+  async createExam(
+    teacherId: string,
+    input: { courseId?: string; title?: string; maxWarnings?: number },
+  ) {
+    if (!input.title || !input.title.trim()) {
       throw new BadRequestException('"title" is required');
     }
+    if (!input.courseId) {
+      throw new BadRequestException('"courseId" is required');
+    }
+    // The course must belong to this teacher.
+    const course = await this.prisma.course.findFirst({
+      where: { id: input.courseId, teacherId },
+      select: { id: true },
+    });
+    if (!course) throw new NotFoundException(`Course ${input.courseId} not found`);
+
     const joinCode = await this.generateUniqueCode();
     return this.prisma.exam.create({
       data: {
         title: input.title.trim(),
         joinCode,
+        courseId: course.id,
         maxWarnings:
           typeof input.maxWarnings === 'number' ? input.maxWarnings : undefined,
       },
     });
   }
 
-  listExams() {
+  listExams(teacherId: string) {
     return this.prisma.exam.findMany({
+      where: { course: { teacherId } },
       orderBy: { createdAt: 'desc' },
-      include: { _count: { select: { sessions: true } } },
+      include: {
+        _count: { select: { sessions: true } },
+        course: { select: { id: true, name: true, subject: true } },
+      },
     });
   }
 
-  async getExam(id: string) {
+  async getExam(teacherId: string, id: string) {
     await this.sessions.expireStale();
-    const exam = await this.prisma.exam.findUnique({
-      where: { id },
-      include: { _count: { select: { sessions: true } } },
+    const exam = await this.prisma.exam.findFirst({
+      where: { id, course: { teacherId } },
+      include: {
+        _count: { select: { sessions: true } },
+        course: { select: { id: true, name: true, subject: true } },
+      },
     });
     if (!exam) throw new NotFoundException(`Exam ${id} not found`);
     return exam;
   }
 
-  async listExamSessions(examId: string) {
-    await this.getExam(examId); // 404s if missing, and expires stale sessions
+  async listExamSessions(teacherId: string, examId: string) {
+    await this.getExam(teacherId, examId); // ownership check + stale expiry
     return this.prisma.studentSession.findMany({
       where: { examId },
       orderBy: { startedAt: 'asc' },
@@ -59,16 +82,22 @@ export class ExamsService {
     });
   }
 
-  async setStatus(id: string, status: string) {
+  async setStatus(teacherId: string, id: string, status: string) {
     const allowed = ['DRAFT', 'OPEN', 'CLOSED'];
     if (!allowed.includes(status)) {
       throw new BadRequestException(`status must be one of ${allowed.join(', ')}`);
     }
-    await this.getExam(id);
+    await this.getExam(teacherId, id); // ownership check
     return this.prisma.exam.update({ where: { id }, data: { status } });
   }
 
-  /// Student registration — the Week 7 "register student sessions" flow.
+  async deleteExam(teacherId: string, id: string) {
+    await this.getExam(teacherId, id); // ownership check
+    await this.prisma.exam.delete({ where: { id } });
+    return { deleted: true };
+  }
+
+  /// Student registration (open — the extension calls this, no teacher auth).
   async register(
     joinCode: string,
     input: { studentName?: string; studentId?: string },
@@ -103,7 +132,7 @@ export class ExamsService {
     };
   }
 
-  /// Dev helper: wipe all exams (sessions + violations cascade).
+  /// System/dev helper: wipe ALL exams across all teachers (admin-token only).
   async clearAll() {
     const { count } = await this.prisma.exam.deleteMany({});
     return { deletedExams: count };

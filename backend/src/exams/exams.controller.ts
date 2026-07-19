@@ -9,55 +9,66 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AdminGuard } from '../common/admin.guard';
+import { CurrentTeacher, CurrentTeacherData } from '../auth/current-teacher.decorator';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ExamsService } from './exams.service';
 
 @Controller('exams')
 export class ExamsController {
   constructor(private readonly examsService: ExamsService) {}
 
-  // ---- Instructor endpoints (require x-admin-token in production) ----
+  // ---- Instructor endpoints (require a teacher login token) ----
 
   @Post()
-  @UseGuards(AdminGuard)
-  create(@Body() body: any) {
-    return this.examsService.createExam(body ?? {});
+  @UseGuards(JwtAuthGuard)
+  create(@CurrentTeacher() teacher: CurrentTeacherData, @Body() body: any) {
+    return this.examsService.createExam(teacher.id, body ?? {});
   }
 
   @Get()
-  @UseGuards(AdminGuard)
-  list() {
-    return this.examsService.listExams();
+  @UseGuards(JwtAuthGuard)
+  list(@CurrentTeacher() teacher: CurrentTeacherData) {
+    return this.examsService.listExams(teacher.id);
   }
 
-  // Dev helper — wipe every exam, session and violation. Guarded so it can
-  // never be triggered anonymously on the public server.
+  @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  get(@CurrentTeacher() teacher: CurrentTeacherData, @Param('id') id: string) {
+    return this.examsService.getExam(teacher.id, id);
+  }
+
+  @Get(':id/sessions')
+  @UseGuards(JwtAuthGuard)
+  sessions(@CurrentTeacher() teacher: CurrentTeacherData, @Param('id') id: string) {
+    return this.examsService.listExamSessions(teacher.id, id);
+  }
+
+  @Post(':id/status')
+  @UseGuards(JwtAuthGuard)
+  setStatus(
+    @CurrentTeacher() teacher: CurrentTeacherData,
+    @Param('id') id: string,
+    @Body() body: any,
+  ) {
+    return this.examsService.setStatus(teacher.id, id, body?.status);
+  }
+
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard)
+  remove(@CurrentTeacher() teacher: CurrentTeacherData, @Param('id') id: string) {
+    return this.examsService.deleteExam(teacher.id, id);
+  }
+
+  // ---- System/dev: wipe everything (admin-token only) ----
+
   @Delete()
   @UseGuards(AdminGuard)
   clearAll() {
     return this.examsService.clearAll();
   }
 
-  @Get(':id')
-  @UseGuards(AdminGuard)
-  get(@Param('id') id: string) {
-    return this.examsService.getExam(id);
-  }
-
-  @Get(':id/sessions')
-  @UseGuards(AdminGuard)
-  sessions(@Param('id') id: string) {
-    return this.examsService.listExamSessions(id);
-  }
-
-  @Post(':id/status')
-  @UseGuards(AdminGuard)
-  setStatus(@Param('id') id: string, @Body() body: any) {
-    return this.examsService.setStatus(id, body?.status);
-  }
-
   // ---- Student endpoint (open — the extension calls this unauthenticated) ----
 
-  // Student joins an exam with the code the instructor shared.
   @Post(':code/register')
   register(
     @Param('code') code: string,

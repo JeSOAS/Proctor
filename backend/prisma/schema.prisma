@@ -16,8 +16,35 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/// An instructor account. Owns courses; the dashboard scopes everything to the
+/// logged-in teacher so teachers only ever see their own data.
+model Teacher {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  createdAt    DateTime @default(now())
+  courses      Course[]
+}
+
+/// A course a teacher runs. `subject` is a plain label for now (promote to its
+/// own table only if subjects need to be shared/managed — see docs/DECISIONS.md).
+model Course {
+  id        String   @id @default(cuid())
+  name      String
+  subject   String?
+  teacher   Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  teacherId String
+  createdAt DateTime @default(now())
+  exams     Exam[]
+
+  @@index([teacherId])
+}
+
 /// An exam session created by an instructor. `joinCode` is the short token a
 /// student enters (later: embedded in a link/QR) to register into this exam.
+/// `courseId` is nullable at the DB level for migration safety, but the API
+/// always requires a course (which establishes teacher ownership).
 model Exam {
   id          String           @id @default(cuid())
   title       String
@@ -25,7 +52,11 @@ model Exam {
   status      String           @default("OPEN") // DRAFT | OPEN | CLOSED
   maxWarnings Int              @default(3)
   createdAt   DateTime         @default(now())
+  course      Course?          @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId    String?
   sessions    StudentSession[]
+
+  @@index([courseId])
 }
 
 /// One student's participation in an exam. Created when the student registers

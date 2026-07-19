@@ -10,6 +10,8 @@ const STALE_TIMEOUT_MS = 90_000;
 export class SessionsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // ---- Student-facing (open — called by the extension, no auth) ----
+
   async endSession(id: string) {
     await this.ensureSessionExists(id);
     return this.prisma.studentSession.update({
@@ -36,15 +38,16 @@ export class SessionsService {
         sessionId,
         type: input.type,
         url: input.url,
-        // SQLite has no Json column type — store as text, parse on read
         payload: input.payload != null ? JSON.stringify(input.payload) : null,
         occurredAt: input.occurredAt ? new Date(input.occurredAt) : undefined,
       },
     });
   }
 
-  async listViolations(sessionId: string) {
-    await this.ensureSessionExists(sessionId);
+  // ---- Instructor (teacher-scoped via Session -> Exam -> Course -> Teacher) ----
+
+  async listViolations(teacherId: string, sessionId: string) {
+    await this.ensureOwned(teacherId, sessionId);
     const violations = await this.prisma.violation.findMany({
       where: { sessionId },
       orderBy: { occurredAt: 'asc' },
@@ -55,14 +58,9 @@ export class SessionsService {
     }));
   }
 
-  // ---- Session / student-info CRUD (instructor; guarded in the controller) ----
-  // "Create" is registration (POST /exams/:code/register). Student info
-  // (studentName, studentId) lives on the session record, so these cover both.
-
-  /// Read one session with its exam context and violation count.
-  async getSession(id: string) {
-    const session = await this.prisma.studentSession.findUnique({
-      where: { id },
+  async getSession(teacherId: string, id: string) {
+    const session = await this.prisma.studentSession.findFirst({
+      where: { id, exam: { course: { teacherId } } },
       include: {
         exam: { select: { id: true, title: true, joinCode: true } },
         _count: { select: { violations: true } },
@@ -72,12 +70,12 @@ export class SessionsService {
     return session;
   }
 
-  /// Update student info (name / id) and/or session status.
   async updateSession(
+    teacherId: string,
     id: string,
     input: { studentName?: string; studentId?: string; status?: string },
   ) {
-    await this.ensureSessionExists(id);
+    await this.ensureOwned(teacherId, id);
     const data: {
       studentName?: string;
       studentId?: string | null;
@@ -108,15 +106,14 @@ export class SessionsService {
     return this.prisma.studentSession.update({ where: { id }, data });
   }
 
-  /// Delete one session and its violations (cascade).
-  async deleteSession(id: string) {
-    await this.ensureSessionExists(id);
+  async deleteSession(teacherId: string, id: string) {
+    await this.ensureOwned(teacherId, id);
     await this.prisma.studentSession.delete({ where: { id } });
     return { deleted: true };
   }
 
-  /// Mark ACTIVE sessions whose heartbeat has gone stale as ENDED. Called by
-  /// the exams read paths so the instructor view reflects who is really live.
+  /// Mark ACTIVE sessions whose heartbeat has gone stale as ENDED. Called by the
+  /// exams read paths so the instructor view reflects who is really live.
   async expireStale() {
     const cutoff = new Date(Date.now() - STALE_TIMEOUT_MS);
     const stale = await this.prisma.studentSession.findMany({
@@ -131,9 +128,10 @@ export class SessionsService {
     }
   }
 
-  /// Bump lastSeenAt; 404 if the session doesn't exist OR is already ENDED.
-  /// The 404 tells the extension its stored session is unusable, so it
-  /// re-registers instead of writing into a closed session.
+  // ---- helpers ----
+
+  /// Bump lastSeenAt; 404 if the session doesn't exist OR is already ENDED, so
+  /// the extension knows to re-register instead of writing into a closed session.
   private async touchSession(id: string) {
     const { count } = await this.prisma.studentSession.updateMany({
       where: { id, status: 'ACTIVE' },
@@ -146,8 +144,16 @@ export class SessionsService {
 
   private async ensureSessionExists(id: string) {
     const session = await this.prisma.studentSession.findUnique({ where: { id } });
-    if (!session) {
-      throw new NotFoundException(`Session ${id} not found`);
-    }
+    if (!session) throw new NotFoundException(`Session ${id} not found`);
+  }
+
+  /// Ownership check for instructor actions: the session's exam's course must
+  /// belong to this teacher, otherwise it's a 404 (indistinguishable from absent).
+  private async ensureOwned(teacherId: string, id: string) {
+    const session = await this.prisma.studentSession.findFirst({
+      where: { id, exam: { course: { teacherId } } },
+      select: { id: true },
+    });
+    if (!session) throw new NotFoundException(`Session ${id} not found`);
   }
 }

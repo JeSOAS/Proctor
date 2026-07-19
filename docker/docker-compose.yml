@@ -35,8 +35,10 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-proctor}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-proctor}?schema=public
       PORT: 3000
-      # Required in production — protects instructor/destructive endpoints.
+      # Creates teacher accounts + guards the dev wipe.
       ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN in docker/.env}
+      # Signs teacher login tokens (JWT).
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in docker/.env}
     depends_on:
       db:
         condition: service_healthy
