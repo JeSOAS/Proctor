@@ -1,108 +1,97 @@
 # Testing Commands (Mac / Windows)
 
-Copy-paste API commands for manually testing the backend. Fill the placeholders:
+> **Most instructor actions now live in the dashboard** at `/dashboard` — these
+> commands are for testing/automation. The extension flow (register/heartbeat/
+> violations) is unaffected and needs no login.
 
-- `<TOKEN>` — the `ADMIN_TOKEN` from `docker/.env`
-- `<CODE>` — a join code (from *create exam*)
-- `<EXAM_ID>` — an exam id (from *create exam*)
-- `<SESSION_ID>` — a session id (from *register* or *list sessions*)
+**Auth model:**
+- `<ADMIN>` = the `ADMIN_TOKEN` (creates teachers, dev wipe) — header `x-admin-token`.
+- `<TOKEN>` = a teacher **login** token from `POST /auth/login` — header
+  `Authorization: Bearer <TOKEN>`. Instructor endpoints (courses, exams, session
+  reads/edits) use this and are scoped to that teacher.
+- Student endpoints (register, heartbeat, violations, end) need no credential.
 
-**Only requests with a JSON body (`-d`) differ between shells:** bash/zsh use
-single quotes, `cmd.exe` uses escaped double quotes, and PowerShell is cleanest
-with `Invoke-RestMethod`. Everything else is identical everywhere.
-
-Instructor/`🔒` routes need the `x-admin-token` header; student routes (register,
-heartbeat, violations, end) do not. Swap the base URL for `http://127.0.0.1:3000`
-to test on the VM before the tunnel is up.
+Placeholders: `<CODE>`/`<COURSE_ID>`/`<EXAM_ID>`/`<SESSION_ID>` come from earlier
+responses. Only JSON-body requests differ between shells (bash single quotes /
+cmd escaped quotes / PowerShell `Invoke-RestMethod`). Swap the base for
+`http://127.0.0.1:3000` to test on the VM.
 
 ---
 
-## Mac / Linux / Git Bash (bash or zsh)
+## Mac / Linux / Git Bash
 
 ```bash
 BASE=https://proctor.jesoas.org
-TOKEN=<your admin token>
+ADMIN=<your admin token>
 
-# --- health ---
-curl $BASE/health
+# --- auth ---
+# create a teacher (admin), then log in to get a token
+curl -X POST $BASE/auth/register -H "Content-Type: application/json" -H "x-admin-token: $ADMIN" \
+  -d '{"email":"teacher@example.com","name":"Teacher","password":"password123"}'
+TOKEN=$(curl -s -X POST $BASE/auth/login -H "Content-Type: application/json" \
+  -d '{"email":"teacher@example.com","password":"password123"}' | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+echo "$TOKEN"
+AUTH="Authorization: Bearer $TOKEN"
 
-# --- exams ---
-# create (returns joinCode + id)
-curl -X POST $BASE/exams -H "Content-Type: application/json" -H "x-admin-token: $TOKEN" -d '{"title":"Live Test Exam"}'
-# list all
-curl $BASE/exams -H "x-admin-token: $TOKEN"
-# get one (with its sessions count)
-curl $BASE/exams/<EXAM_ID> -H "x-admin-token: $TOKEN"
-# list students in an exam
-curl $BASE/exams/<EXAM_ID>/sessions -H "x-admin-token: $TOKEN"
-# close (or OPEN / DRAFT)
-curl -X POST $BASE/exams/<EXAM_ID>/status -H "Content-Type: application/json" -H "x-admin-token: $TOKEN" -d '{"status":"CLOSED"}'
+# --- courses (teacher) ---
+curl -X POST $BASE/courses -H "Content-Type: application/json" -H "$AUTH" -d '{"name":"CS101","subject":"Computer Science"}'
+curl $BASE/courses -H "$AUTH"
 
-# --- register a student = CREATE a session (no token) ---
-curl -X POST $BASE/exams/<CODE>/register -H "Content-Type: application/json" -d '{"studentName":"Alice Tan","studentId":"6530001"}'
+# --- exams (teacher) ---
+curl -X POST $BASE/exams -H "Content-Type: application/json" -H "$AUTH" -d '{"courseId":"<COURSE_ID>","title":"Midterm"}'
+curl $BASE/exams -H "$AUTH"
+curl $BASE/exams/<EXAM_ID>/sessions -H "$AUTH"
+curl -X POST $BASE/exams/<EXAM_ID>/status -H "Content-Type: application/json" -H "$AUTH" -d '{"status":"CLOSED"}'
+curl -X DELETE $BASE/exams/<EXAM_ID> -H "$AUTH"
 
-# --- session + student-info CRUD ---
-# READ one session (student info, status, exam, counts)
-curl $BASE/sessions/<SESSION_ID> -H "x-admin-token: $TOKEN"
-# UPDATE student info
-curl -X PATCH $BASE/sessions/<SESSION_ID> -H "Content-Type: application/json" -H "x-admin-token: $TOKEN" -d '{"studentName":"Alice B. Tan","studentId":"6530999"}'
-# UPDATE status (ACTIVE | ENDED | DISCONNECTED)
-curl -X PATCH $BASE/sessions/<SESSION_ID> -H "Content-Type: application/json" -H "x-admin-token: $TOKEN" -d '{"status":"ENDED"}'
-# DELETE one session (+ its violations)
-curl -X DELETE $BASE/sessions/<SESSION_ID> -H "x-admin-token: $TOKEN"
+# --- student joins (open, no token) ---
+curl -X POST $BASE/exams/<CODE>/register -H "Content-Type: application/json" -d '{"studentName":"Alice","studentId":"6530001"}'
 
-# --- violations / lifecycle (student-facing, no token) ---
-curl $BASE/sessions/<SESSION_ID>/violations
-curl -X POST $BASE/sessions/<SESSION_ID>/heartbeat
-curl -X POST $BASE/sessions/<SESSION_ID>/end
+# --- sessions ---
+curl $BASE/sessions/<SESSION_ID> -H "$AUTH"                      # read (teacher)
+curl $BASE/sessions/<SESSION_ID>/violations -H "$AUTH"           # events (teacher)
+curl -X PATCH $BASE/sessions/<SESSION_ID> -H "Content-Type: application/json" -H "$AUTH" -d '{"status":"ENDED"}'
+curl -X DELETE $BASE/sessions/<SESSION_ID> -H "$AUTH"
+curl -X POST $BASE/sessions/<SESSION_ID>/end                     # student leave (open)
 
 # --- checks & reset ---
-# guard check — must print 401
-curl -s -o /dev/null -w "%{http_code}\n" -X POST $BASE/exams -H "Content-Type: application/json" -d '{"title":"no token"}'
-# wipe everything
-curl -X DELETE $BASE/exams -H "x-admin-token: $TOKEN"
+curl -s -o /dev/null -w "%{http_code}\n" -X POST $BASE/exams -H "Content-Type: application/json" -d '{"title":"no token"}'   # 401
+curl -X DELETE $BASE/exams -H "x-admin-token: $ADMIN"            # wipe all (admin)
 ```
 
 ---
 
 ## Windows — PowerShell
 
-`Invoke-RestMethod` prints parsed objects; append `| ConvertTo-Json` for raw JSON.
-
 ```powershell
 $base  = "https://proctor.jesoas.org"
-$token = "<your admin token>"
-$admin = @{ "x-admin-token" = $token }
+$admin = @{ "x-admin-token" = "<your admin token>" }
 
-# --- health ---
-Invoke-RestMethod "$base/health"
+# --- auth ---
+Invoke-RestMethod -Method Post "$base/auth/register" -Headers $admin -ContentType "application/json" `
+  -Body '{"email":"teacher@example.com","name":"Teacher","password":"password123"}'
+$login = Invoke-RestMethod -Method Post "$base/auth/login" -ContentType "application/json" `
+  -Body '{"email":"teacher@example.com","password":"password123"}'
+$auth = @{ Authorization = "Bearer $($login.token)" }
 
-# --- exams ---
-Invoke-RestMethod -Method Post "$base/exams" -Headers $admin -ContentType "application/json" -Body '{"title":"Live Test Exam"}'
-Invoke-RestMethod "$base/exams" -Headers $admin
-Invoke-RestMethod "$base/exams/<EXAM_ID>" -Headers $admin
-Invoke-RestMethod "$base/exams/<EXAM_ID>/sessions" -Headers $admin
-Invoke-RestMethod -Method Post "$base/exams/<EXAM_ID>/status" -Headers $admin -ContentType "application/json" -Body '{"status":"CLOSED"}'
+# --- courses / exams (teacher) ---
+Invoke-RestMethod -Method Post "$base/courses" -Headers $auth -ContentType "application/json" -Body '{"name":"CS101","subject":"Computer Science"}'
+Invoke-RestMethod "$base/courses" -Headers $auth
+Invoke-RestMethod -Method Post "$base/exams" -Headers $auth -ContentType "application/json" -Body '{"courseId":"<COURSE_ID>","title":"Midterm"}'
+Invoke-RestMethod "$base/exams" -Headers $auth
+Invoke-RestMethod "$base/exams/<EXAM_ID>/sessions" -Headers $auth
+Invoke-RestMethod -Method Post "$base/exams/<EXAM_ID>/status" -Headers $auth -ContentType "application/json" -Body '{"status":"CLOSED"}'
 
-# --- register a student = CREATE a session (no token) ---
-Invoke-RestMethod -Method Post "$base/exams/<CODE>/register" -ContentType "application/json" -Body '{"studentName":"Alice Tan","studentId":"6530001"}'
+# --- student joins (open) ---
+Invoke-RestMethod -Method Post "$base/exams/<CODE>/register" -ContentType "application/json" -Body '{"studentName":"Alice","studentId":"6530001"}'
 
-# --- session + student-info CRUD ---
-Invoke-RestMethod "$base/sessions/<SESSION_ID>" -Headers $admin
-Invoke-RestMethod -Method Patch "$base/sessions/<SESSION_ID>" -Headers $admin -ContentType "application/json" -Body '{"studentName":"Alice B. Tan","studentId":"6530999"}'
-Invoke-RestMethod -Method Patch "$base/sessions/<SESSION_ID>" -Headers $admin -ContentType "application/json" -Body '{"status":"ENDED"}'
-Invoke-RestMethod -Method Delete "$base/sessions/<SESSION_ID>" -Headers $admin
+# --- sessions ---
+Invoke-RestMethod "$base/sessions/<SESSION_ID>" -Headers $auth
+Invoke-RestMethod "$base/sessions/<SESSION_ID>/violations" -Headers $auth
+Invoke-RestMethod -Method Patch "$base/sessions/<SESSION_ID>" -Headers $auth -ContentType "application/json" -Body '{"status":"ENDED"}'
+Invoke-RestMethod -Method Delete "$base/sessions/<SESSION_ID>" -Headers $auth
 
-# --- violations / lifecycle (no token) ---
-Invoke-RestMethod "$base/sessions/<SESSION_ID>/violations"
-Invoke-RestMethod -Method Post "$base/sessions/<SESSION_ID>/heartbeat"
-Invoke-RestMethod -Method Post "$base/sessions/<SESSION_ID>/end"
-
-# --- checks & reset ---
-# guard check — should print "HTTP 401"
-try { Invoke-RestMethod -Method Post "$base/exams" -ContentType "application/json" -Body '{"title":"no token"}' | Out-Null }
-catch { "HTTP " + $_.Exception.Response.StatusCode.value__ }
-# wipe everything
+# --- reset (admin) ---
 Invoke-RestMethod -Method Delete "$base/exams" -Headers $admin
 ```
 
@@ -110,35 +99,20 @@ Invoke-RestMethod -Method Delete "$base/exams" -Headers $admin
 
 ## Windows — Command Prompt (cmd.exe)
 
+Log in first, copy the `token` from the response, then `set TOKEN=<it>`.
+
 ```cmd
 set BASE=https://proctor.jesoas.org
-set TOKEN=<your admin token>
+set ADMIN=<your admin token>
 
-:: --- health ---
-curl %BASE%/health
+curl -X POST %BASE%/auth/register -H "Content-Type: application/json" -H "x-admin-token: %ADMIN%" -d "{\"email\":\"teacher@example.com\",\"name\":\"Teacher\",\"password\":\"password123\"}"
+curl -X POST %BASE%/auth/login -H "Content-Type: application/json" -d "{\"email\":\"teacher@example.com\",\"password\":\"password123\"}"
+set TOKEN=<paste the token from the response>
 
-:: --- exams ---
-curl -X POST %BASE%/exams -H "Content-Type: application/json" -H "x-admin-token: %TOKEN%" -d "{\"title\":\"Live Test Exam\"}"
-curl %BASE%/exams -H "x-admin-token: %TOKEN%"
-curl %BASE%/exams/<EXAM_ID> -H "x-admin-token: %TOKEN%"
-curl %BASE%/exams/<EXAM_ID>/sessions -H "x-admin-token: %TOKEN%"
-curl -X POST %BASE%/exams/<EXAM_ID>/status -H "Content-Type: application/json" -H "x-admin-token: %TOKEN%" -d "{\"status\":\"CLOSED\"}"
-
-:: --- register a student = CREATE a session (no token) ---
-curl -X POST %BASE%/exams/<CODE>/register -H "Content-Type: application/json" -d "{\"studentName\":\"Alice Tan\",\"studentId\":\"6530001\"}"
-
-:: --- session + student-info CRUD ---
-curl %BASE%/sessions/<SESSION_ID> -H "x-admin-token: %TOKEN%"
-curl -X PATCH %BASE%/sessions/<SESSION_ID> -H "Content-Type: application/json" -H "x-admin-token: %TOKEN%" -d "{\"studentName\":\"Alice B. Tan\",\"studentId\":\"6530999\"}"
-curl -X PATCH %BASE%/sessions/<SESSION_ID> -H "Content-Type: application/json" -H "x-admin-token: %TOKEN%" -d "{\"status\":\"ENDED\"}"
-curl -X DELETE %BASE%/sessions/<SESSION_ID> -H "x-admin-token: %TOKEN%"
-
-:: --- violations / lifecycle (no token) ---
-curl %BASE%/sessions/<SESSION_ID>/violations
-curl -X POST %BASE%/sessions/<SESSION_ID>/heartbeat
-curl -X POST %BASE%/sessions/<SESSION_ID>/end
-
-:: --- checks & reset ---
-curl -s -o NUL -w "%{http_code}\n" -X POST %BASE%/exams -H "Content-Type: application/json" -d "{\"title\":\"no token\"}"
-curl -X DELETE %BASE%/exams -H "x-admin-token: %TOKEN%"
+curl -X POST %BASE%/courses -H "Content-Type: application/json" -H "Authorization: Bearer %TOKEN%" -d "{\"name\":\"CS101\",\"subject\":\"Computer Science\"}"
+curl %BASE%/exams -H "Authorization: Bearer %TOKEN%"
+curl -X POST %BASE%/exams -H "Content-Type: application/json" -H "Authorization: Bearer %TOKEN%" -d "{\"courseId\":\"<COURSE_ID>\",\"title\":\"Midterm\"}"
+curl -X POST %BASE%/exams/<CODE>/register -H "Content-Type: application/json" -d "{\"studentName\":\"Alice\",\"studentId\":\"6530001\"}"
+curl %BASE%/sessions/<SESSION_ID>/violations -H "Authorization: Bearer %TOKEN%"
+curl -X DELETE %BASE%/exams -H "x-admin-token: %ADMIN%"
 ```

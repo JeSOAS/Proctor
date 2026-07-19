@@ -29,7 +29,9 @@ services:
 
   backend:
     build:
-      context: ../backend
+      # Repo root, so the image can build both the dashboard and the backend.
+      context: ..
+      dockerfile: backend/Dockerfile
     container_name: proctor-backend
     restart: unless-stopped
     environment:

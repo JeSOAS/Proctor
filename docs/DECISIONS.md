@@ -118,17 +118,64 @@ the deck's plan; the tunnel is the pragmatic choice for this handoff window.
 Centralizing it (and allowing an override) lets the next team repoint the
 extension at their own backend without hunting through the code.
 
+## 9. Teacher accounts + JWT (multi-tenancy)
+
+**Decision:** Instructors are `Teacher` accounts. An admin creates them
+(`POST /auth/register` with `x-admin-token`) — no public sign-up. Teachers log in
+(`POST /auth/login`) and get a JWT (Node scrypt for password hashing — no native
+bcrypt/argon2 dependency, which is painful on ARM/Windows). Every instructor
+endpoint is scoped to the logged-in teacher through the ownership chain, so a
+teacher can only ever see their own data. The old single `ADMIN_TOKEN` now only
+creates teachers and guards the dev wipe.
+
+**Why:** "A dashboard isolated for different teachers" is multi-tenancy, which
+requires authentication. Admin-created accounts (vs open sign-up) keep a public
+server from accumulating random accounts.
+
+**Next:** password reset, refresh tokens, and a real "system admin" UI instead of
+the shared token.
+
+## 10. Model: Teacher → Course → Exam → StudentSession → Violation
+
+**Decision:** Added `Teacher` and `Course` above the existing `Exam`. `subject`
+is a plain field on `Course`. `Exam.courseId` is nullable at the DB level (so the
+migration is safe on existing data) but required by the API. Students stay as
+`StudentSession` records (no separate `Student` entity).
+
+**Why:** Matches how teachers think (courses contain exams) and gives the
+ownership chain that enforces isolation. Nullable `courseId` avoided a
+destructive migration; a `Student` table wasn't worth the identity/roster
+complexity for SP2 (students self-identify at join time).
+
+**Next:** promote `subject` to its own table if it needs to be shared/managed;
+add a `Student` entity if cross-exam tracking is needed.
+
+## 11. Dashboard is React, served by the backend
+
+**Decision:** The dashboard (`dashboard/`, Vite + React + TypeScript + Tailwind)
+is built and served by the NestJS backend at `/dashboard` (via
+`@nestjs/serve-static`). Same origin as the API — no CORS, one deployment. The
+Docker image is multi-stage: it builds the dashboard and hands the output to the
+backend (`DASHBOARD_DIST`).
+
+**Why:** Fastest path to a usable UI with the fewest moving parts to deploy and
+hand off; still the deck's React stack. Navigation is state-based (no router), so
+there are no deep-link routes to configure.
+
+**Next:** if the dashboard grows, add client-side routing and split it into its
+own deployment (Cloudflare Pages) — the API is already CORS-open.
+
 ## Deliberately left for the next team
 
 None of these are bugs — they are scoped-out on purpose for SP2:
 
-- **Instructor dashboard** (React) — no UI yet; instructors use the REST API.
-- **Real-time updates** (Socket.IO) — the API is poll-based for now.
+- **Real-time updates** (Socket.IO) — the dashboard polls (5s) for now.
 - **Auto-submit on violation threshold** + in-browser warnings — `maxWarnings`
   is stored but not yet enforced.
 - **Restricted-site detection** — URLs are captured (`TAB_SWITCH`/`TAB_NAVIGATE`)
   but not matched against a blocklist yet.
 - **Offline event buffering + `DISCONNECTED` status** — events during a network
   outage are currently dropped; see the backend README "unstable internet" note.
-- **Instructor auth (JWT), Google/MS Forms auto-submit, Telegram alerts** — all
-  in the deck, none implemented.
+- **Google/MS Forms auto-submit, Telegram alerts** — in the deck, not implemented.
+- **Student rate-limiting / anti-abuse** — anyone with a join code can currently
+  post events; a real deployment should bind a session to its device.

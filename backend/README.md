@@ -10,7 +10,11 @@ NestJS API that receives and stores monitoring events from the Chrome extension.
 
 ## Data model
 
-- **Exam** — an instructor-created exam session; has a unique `joinCode`.
+`Teacher → Course → Exam → StudentSession → Violation`
+
+- **Teacher** — an instructor account (login); owns courses.
+- **Course** — a course a teacher runs (`subject` is a label).
+- **Exam** — an exam in a course; has a unique `joinCode`.
 - **StudentSession** — one student's participation in an exam (created on register).
 - **Violation** — a monitoring event belonging to a StudentSession.
 
@@ -22,10 +26,12 @@ See [../docs/DECISIONS.md](../docs/DECISIONS.md) for why the model and stack are
 [../docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md). In short, from `docker/`:
 
 ```bash
-cp .env.example .env          # set POSTGRES_PASSWORD and ADMIN_TOKEN
-docker compose up -d --build
+cp .env.example .env          # set POSTGRES_PASSWORD, ADMIN_TOKEN, JWT_SECRET
+docker compose up -d --build  # builds the dashboard + backend
 curl http://127.0.0.1:3000/health
 ```
+
+The dashboard is served at `/dashboard` (built into the image automatically).
 
 **Without Docker** (needs a reachable PostgreSQL):
 
@@ -41,38 +47,52 @@ Health check: <http://localhost:3000/health>
 
 ## API
 
-**Exams (instructor side)**
+The instructor dashboard at **`/dashboard`** is the primary UI; these endpoints back it (and the extension).
+
+**Auth**
 
 | Method & path | Purpose |
 |---|---|
-| `POST /exams` | create an exam `{ title, maxWarnings? }` → returns `{ id, joinCode, ... }` |
-| `GET /exams` | list exams with student-session counts |
-| `GET /exams/:id` | one exam (auto-ends stale sessions first) |
-| `GET /exams/:id/sessions` | students registered in an exam, with violation counts |
-| `POST /exams/:id/status` | set exam status `{ status: OPEN \| CLOSED \| DRAFT }` |
-| `DELETE /exams` | **dev helper** — wipe all exams, sessions, violations |
+| `POST /auth/register` | 🔑 admin creates a teacher `{ email, name, password }` |
+| `POST /auth/login` | teacher login `{ email, password }` → `{ token }` |
+| `GET /auth/me` | 🎫 current teacher |
 
-🔒 The instructor endpoints above require an `x-admin-token` header matching
-`ADMIN_TOKEN` whenever that is set (always set it in production). The student
-endpoints below are intentionally open — the extension calls them with no credential.
-
-**Registration + session lifecycle (student side / extension)**
+**Courses** (🎫 scoped to the logged-in teacher)
 
 | Method & path | Purpose |
 |---|---|
-| `GET /health` | liveness check |
-| `POST /exams/:code/register` | student joins with a join code `{ studentName, studentId? }` → returns `{ sessionId, examTitle, maxWarnings }` |
-| `POST /sessions/:id/heartbeat` | extension keep-alive; sent every 30s |
-| `POST /sessions/:id/violations` | record an event `{ type, url?, payload?, occurredAt? }` |
-| `GET /sessions/:id/violations` | list a session's events in order |
-| `POST /sessions/:id/end` | mark a session ENDED |
-| `GET /sessions/:id` | 🔒 read one session (student info, status, exam, counts) |
-| `PATCH /sessions/:id` | 🔒 update `{ studentName?, studentId?, status? }` |
-| `DELETE /sessions/:id` | 🔒 delete a session + its violations |
+| `POST /courses` | create `{ name, subject? }` |
+| `GET /courses` | list your courses |
+| `GET /courses/:id` · `PATCH /courses/:id` · `DELETE /courses/:id` | read / update / delete |
 
-The 🔒 session routes are instructor CRUD and require the `x-admin-token`. Student
-info (name, ID) lives on the session record, so these cover both. "Create" is
-registration (`POST /exams/:code/register`).
+**Exams** (🎫)
+
+| Method & path | Purpose |
+|---|---|
+| `POST /exams` | create `{ courseId, title, maxWarnings? }` → `{ id, joinCode, ... }` |
+| `GET /exams` | list your exams |
+| `GET /exams/:id` | one exam (auto-ends stale sessions) |
+| `GET /exams/:id/sessions` | students in an exam, with violation counts |
+| `POST /exams/:id/status` | set status `{ status: OPEN \| CLOSED \| DRAFT }` |
+| `DELETE /exams/:id` | delete one exam |
+| `DELETE /exams` | 🔑 **dev wipe** — all exams/sessions/violations |
+
+**Sessions** — student/extension (open) + instructor (🎫)
+
+| Method & path | Purpose |
+|---|---|
+| `GET /health` | liveness check (open) |
+| `POST /exams/:code/register` | student joins `{ studentName, studentId? }` → `{ sessionId, ... }` (open) |
+| `POST /sessions/:id/heartbeat` | extension keep-alive, every 30s (open) |
+| `POST /sessions/:id/violations` | record an event (open) |
+| `POST /sessions/:id/end` | mark a session ENDED (open) |
+| `GET /sessions/:id` · `GET /sessions/:id/violations` | 🎫 read a session / its events |
+| `PATCH /sessions/:id` · `DELETE /sessions/:id` | 🎫 update / delete a session |
+
+Auth legend: 🔑 = `x-admin-token` header (`ADMIN_TOKEN`); 🎫 = teacher token
+(`Authorization: Bearer <token>` from `/auth/login`); open = no credential (the
+extension). The 🎫 routes are scoped to the logged-in teacher — you only ever see
+your own courses/exams/students.
 
 Registration only succeeds while the exam is `OPEN`; a `CLOSED`/`DRAFT` exam
 returns 409. There is no anonymous session creation — every session belongs to

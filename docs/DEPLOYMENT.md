@@ -28,7 +28,7 @@ docker --version && docker compose version
 ```bash
 git clone https://github.com/JeSOAS/Proctor.git
 cd Proctor
-git checkout week7-session-management   # until it is merged to main
+# `main` has the full system: backend, dashboard, and extension.
 ```
 
 ### 1.3 Configure secrets
@@ -36,9 +36,10 @@ git checkout week7-session-management   # until it is merged to main
 ```bash
 cp docker/.env.example docker/.env
 # generate strong values:
-echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" 
+echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)"
 echo "ADMIN_TOKEN=$(openssl rand -hex 24)"
-# edit docker/.env and paste those in (keep ADMIN_TOKEN — you need it below)
+echo "JWT_SECRET=$(openssl rand -hex 24)"
+# edit docker/.env and paste those in (keep ADMIN_TOKEN — you need it to create teachers)
 nano docker/.env
 ```
 
@@ -46,7 +47,7 @@ nano docker/.env
 
 ```bash
 cd docker
-docker compose up -d --build      # first build takes a few minutes
+docker compose up -d --build      # first build takes a few minutes (dashboard + backend)
 docker compose ps                 # db healthy, backend running
 docker compose logs -f backend    # should show migrations applied + "listening on ...:3000"
 ```
@@ -58,19 +59,10 @@ The backend is bound to `127.0.0.1:3000` (not public yet), so test from the VM:
 ```bash
 curl http://127.0.0.1:3000/health
 # {"status":"ok",...}
-
-# smoke test — creating an exam needs the admin token:
-TOKEN=$(grep ADMIN_TOKEN docker/.env | cut -d= -f2)
-CODE=$(curl -s -X POST http://127.0.0.1:3000/exams \
-  -H "Content-Type: application/json" -H "x-admin-token: $TOKEN" \
-  -d '{"title":"Deploy Smoke Test"}' | grep -o '"joinCode":"[^"]*"')
-echo "$CODE"
-# registering a student needs NO token (the extension is unauthenticated):
-# curl -s -X POST http://127.0.0.1:3000/exams/<CODE>/register \
-#   -H "Content-Type: application/json" -d '{"studentName":"Test"}'
 ```
 
-Confirm that creating an exam **without** the token is rejected:
+Instructor actions now need a teacher login (set up in Step 3). As a guard check,
+creating an exam **without** a token must be rejected:
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" -X POST http://127.0.0.1:3000/exams \
@@ -81,8 +73,8 @@ curl -s -o /dev/null -w "%{http_code}\n" -X POST http://127.0.0.1:3000/exams \
 ### Updating later
 
 ```bash
-cd ~/Proctor && git pull
-cd docker && docker compose up -d --build
+cd ~/Proctor && git checkout main && git pull
+cd docker && docker compose --profile tunnel up -d --build
 ```
 
 Migrations apply automatically on backend startup (`prisma migrate deploy`).
@@ -153,3 +145,24 @@ in `extension/background.js` and `extension/popup.js`).
 `docker compose --profile tunnel down` stops everything; delete the tunnel in the
 Zero Trust dashboard. To fully hand off, point `jesoas.org`'s nameservers back to
 your registrar's defaults (or transfer the Cloudflare account).
+
+---
+
+## Step 3 — Create a teacher and open the dashboard
+
+The instructor dashboard is served by the backend at **`/dashboard`**. Teachers
+are created by an admin (with `ADMIN_TOKEN`) — there is no public sign-up.
+
+1. Create a teacher account (once per teacher). From your laptop or the VM:
+
+   ```bash
+   curl -X POST https://proctor.jesoas.org/auth/register \
+     -H "Content-Type: application/json" \
+     -H "x-admin-token: <ADMIN_TOKEN>" \
+     -d '{"email":"teacher@example.com","name":"Teacher Name","password":"at-least-8-chars"}'
+   ```
+   (Windows shells need escaped-quote JSON — see docs/TESTING-COMMANDS.md.)
+
+2. Open **https://proctor.jesoas.org/dashboard/** and sign in with that email and
+   password. Create courses and exams, share each exam's join code with students,
+   and watch live sessions + violations — no more curl.
