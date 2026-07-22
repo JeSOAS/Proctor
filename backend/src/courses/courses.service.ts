@@ -5,14 +5,15 @@ import { PrismaService } from '../prisma/prisma.service';
 export class CoursesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  create(teacherId: string, input: { name?: string; subject?: string }) {
+  create(teacherId: string, input: { name?: string; year?: string; section?: string }) {
     if (!input.name || !input.name.trim()) {
       throw new BadRequestException('"name" is required');
     }
     return this.prisma.course.create({
       data: {
         name: input.name.trim(),
-        subject: input.subject?.trim() || null,
+        year: input.year?.trim() || null,
+        section: input.section?.trim() || null,
         teacherId,
       },
     });
@@ -38,17 +39,18 @@ export class CoursesService {
   async update(
     teacherId: string,
     id: string,
-    input: { name?: string; subject?: string },
+    input: { name?: string; year?: string; section?: string },
   ) {
     await this.get(teacherId, id); // ownership check
-    const data: { name?: string; subject?: string | null } = {};
+    const data: { name?: string; year?: string | null; section?: string | null } = {};
     if (input.name !== undefined) {
       if (!input.name.trim()) throw new BadRequestException('"name" cannot be empty');
       data.name = input.name.trim();
     }
-    if (input.subject !== undefined) data.subject = input.subject?.trim() || null;
+    if (input.year !== undefined) data.year = input.year?.trim() || null;
+    if (input.section !== undefined) data.section = input.section?.trim() || null;
     if (Object.keys(data).length === 0) {
-      throw new BadRequestException('nothing to update (name or subject)');
+      throw new BadRequestException('nothing to update (name, year or section)');
     }
     return this.prisma.course.update({ where: { id }, data });
   }

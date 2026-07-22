@@ -1,24 +1,25 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { api } from '../api';
+import { JoinCode, SearchBar } from '../ui';
 
 const STATUS_STYLES: Record<string, string> = {
-  OPEN: 'bg-green-100 text-green-700',
-  CLOSED: 'bg-gray-200 text-gray-600',
-  DRAFT: 'bg-yellow-100 text-yellow-700',
+  OPEN: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
+  CLOSED: 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
+  DRAFT: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300',
 };
 
-export function ExamsPanel({
-  course,
-  onOpen,
-  onBack,
-}: {
-  course: any;
-  onOpen: (exam: any) => void;
-  onBack: () => void;
-}) {
+const input =
+  'px-3 py-2 rounded-lg text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500';
+
+const fmt = (d?: string) => (d ? new Date(d).toLocaleString() : null);
+
+export function ExamsPanel({ course, onOpen }: { course: any; onOpen: (exam: any) => void }) {
   const [exams, setExams] = useState<any[]>([]);
   const [title, setTitle] = useState('');
   const [maxWarnings, setMaxWarnings] = useState(3);
+  const [startsAt, setStartsAt] = useState('');
+  const [endsAt, setEndsAt] = useState('');
+  const [q, setQ] = useState('');
   const [error, setError] = useState('');
 
   async function load() {
@@ -36,9 +37,18 @@ export function ExamsPanel({
   async function create(e: FormEvent) {
     e.preventDefault();
     setError('');
+    if (!title.trim()) return setError('Exam title is required.');
     try {
-      await api.createExam(course.id, title, Number(maxWarnings));
+      await api.createExam({
+        courseId: course.id,
+        title,
+        maxWarnings: Number(maxWarnings),
+        startsAt: startsAt || undefined,
+        endsAt: endsAt || undefined,
+      });
       setTitle('');
+      setStartsAt('');
+      setEndsAt('');
       load();
     } catch (e: any) {
       setError(e.message);
@@ -55,69 +65,79 @@ export function ExamsPanel({
     }
   }
 
+  const filtered = exams.filter((e) =>
+    `${e.title} ${e.joinCode}`.toLowerCase().includes(q.toLowerCase()),
+  );
+
   return (
     <section>
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-lg font-semibold">Exams in {course.name}</h2>
-        <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-900">
-          ← Courses
-        </button>
-      </div>
-
-      <form onSubmit={create} className="flex flex-wrap gap-2 mb-4">
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Exam title"
-          className="flex-1 min-w-40 px-3 py-2 border border-gray-300 rounded-lg text-sm"
-        />
-        <label className="flex items-center gap-1 text-sm text-gray-500">
-          Max warnings
-          <input
-            type="number"
-            min={0}
-            value={maxWarnings}
-            onChange={(e) => setMaxWarnings(Number(e.target.value))}
-            className="w-16 px-2 py-2 border border-gray-300 rounded-lg text-sm"
-          />
-        </label>
-        <button className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">
-          Create exam
-        </button>
+      <form onSubmit={create} className="mb-1 space-y-2">
+        <div className="flex flex-wrap gap-2">
+          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Exam title" className={`flex-1 min-w-48 ${input}`} />
+          <label className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
+            Max warnings
+            <input type="number" min={0} value={maxWarnings} onChange={(e) => setMaxWarnings(Number(e.target.value))} className={`w-16 ${input}`} />
+          </label>
+        </div>
+        <div className="flex flex-wrap gap-3 items-end">
+          <label className="text-xs text-gray-500 dark:text-gray-400">
+            Start time (optional)
+            <input type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} className={`block mt-1 ${input}`} />
+          </label>
+          <label className="text-xs text-gray-500 dark:text-gray-400">
+            End time / auto-close (optional)
+            <input type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} className={`block mt-1 ${input}`} />
+          </label>
+          <button className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">
+            Create exam
+          </button>
+        </div>
       </form>
+      <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+        Leave <b>End time</b> empty to end the exam yourself; if set, the exam closes
+        automatically at that time. Any exam left open with no end time auto-closes after 24&nbsp;hours.
+      </p>
 
-      {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400 mb-3">{error}</p>}
+
+      <SearchBar value={q} onChange={setQ} placeholder="Search exams…" />
 
       <div className="grid gap-2">
-        {exams.map((e) => (
-          <div
-            key={e.id}
-            className="bg-white border border-gray-200 rounded-lg px-4 py-3 flex items-center justify-between"
-          >
-            <button className="text-left" onClick={() => onOpen(e)}>
-              <div className="font-medium flex items-center gap-2">
-                {e.title}
-                <span
-                  className={`text-xs px-2 py-0.5 rounded-full ${STATUS_STYLES[e.status] || ''}`}
-                >
-                  {e.status}
-                </span>
+        {filtered.map((e) => (
+          <div key={e.id} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="font-medium flex items-center gap-2 mb-1">
+                  <button className="text-gray-900 dark:text-gray-100 hover:text-blue-600 dark:hover:text-blue-400" onClick={() => onOpen(e)}>
+                    {e.title}
+                  </button>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_STYLES[e.status] || ''}`}>{e.status}</span>
+                </div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs text-gray-500 dark:text-gray-400">Join code</span>
+                  <JoinCode code={e.joinCode} />
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  {e._count?.sessions ?? 0} student(s)
+                  {fmt(e.startsAt) && <> · starts {fmt(e.startsAt)}</>}
+                  {fmt(e.endsAt) && <> · ends {fmt(e.endsAt)}</>}
+                </div>
               </div>
-              <div className="text-xs text-gray-500">
-                Join code <span className="font-mono font-semibold">{e.joinCode}</span> ·{' '}
-                {e._count?.sessions ?? 0} student(s)
+              <div className="flex flex-col items-end gap-2 shrink-0">
+                <button onClick={() => onOpen(e)} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
+                  Open →
+                </button>
+                <button onClick={() => remove(e.id)} className="text-xs text-red-600 dark:text-red-400 hover:underline">
+                  Delete
+                </button>
               </div>
-            </button>
-            <button
-              onClick={() => remove(e.id)}
-              className="text-xs text-red-600 hover:underline"
-            >
-              Delete
-            </button>
+            </div>
           </div>
         ))}
-        {exams.length === 0 && (
-          <p className="text-sm text-gray-500">No exams yet — create one above.</p>
+        {filtered.length === 0 && (
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {exams.length === 0 ? 'No exams yet — create one above.' : 'No matches.'}
+          </p>
         )}
       </div>
     </section>

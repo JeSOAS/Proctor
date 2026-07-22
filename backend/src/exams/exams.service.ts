@@ -11,6 +11,10 @@ import { SessionsService } from '../sessions/sessions.service';
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const CODE_LENGTH = 6;
 
+// Safeguard: an OPEN exam with no end time that has been open longer than this
+// is auto-closed, so a forgotten exam can't stay open indefinitely.
+const MAX_EXAM_OPEN_HOURS = 24;
+
 // Ownership is enforced through the chain Exam -> Course -> Teacher: every query
 // filters by the teacher, so a teacher can only ever touch their own exams.
 @Injectable()
@@ -22,7 +26,13 @@ export class ExamsService {
 
   async createExam(
     teacherId: string,
-    input: { courseId?: string; title?: string; maxWarnings?: number },
+    input: {
+      courseId?: string;
+      title?: string;
+      maxWarnings?: number;
+      startsAt?: string;
+      endsAt?: string;
+    },
   ) {
     if (!input.title || !input.title.trim()) {
       throw new BadRequestException('"title" is required');
@@ -30,12 +40,17 @@ export class ExamsService {
     if (!input.courseId) {
       throw new BadRequestException('"courseId" is required');
     }
-    // The course must belong to this teacher.
     const course = await this.prisma.course.findFirst({
       where: { id: input.courseId, teacherId },
       select: { id: true },
     });
     if (!course) throw new NotFoundException(`Course ${input.courseId} not found`);
+
+    const startsAt = this.parseDate(input.startsAt, 'startsAt');
+    const endsAt = this.parseDate(input.endsAt, 'endsAt');
+    if (startsAt && endsAt && endsAt <= startsAt) {
+      throw new BadRequestException('endsAt must be after startsAt');
+    }
 
     const joinCode = await this.generateUniqueCode();
     return this.prisma.exam.create({
@@ -45,28 +60,32 @@ export class ExamsService {
         courseId: course.id,
         maxWarnings:
           typeof input.maxWarnings === 'number' ? input.maxWarnings : undefined,
+        startsAt,
+        endsAt,
       },
     });
   }
 
-  listExams(teacherId: string) {
+  async listExams(teacherId: string) {
+    await this.closeExpiredExams();
     return this.prisma.exam.findMany({
       where: { course: { teacherId } },
       orderBy: { createdAt: 'desc' },
       include: {
         _count: { select: { sessions: true } },
-        course: { select: { id: true, name: true, subject: true } },
+        course: { select: { id: true, name: true, year: true, section: true } },
       },
     });
   }
 
   async getExam(teacherId: string, id: string) {
+    await this.closeExpiredExams();
     await this.sessions.expireStale();
     const exam = await this.prisma.exam.findFirst({
       where: { id, course: { teacherId } },
       include: {
         _count: { select: { sessions: true } },
-        course: { select: { id: true, name: true, subject: true } },
+        course: { select: { id: true, name: true, year: true, section: true } },
       },
     });
     if (!exam) throw new NotFoundException(`Exam ${id} not found`);
@@ -110,7 +129,16 @@ export class ExamsService {
       where: { joinCode: joinCode.toUpperCase() },
     });
     if (!exam) throw new NotFoundException(`No exam for code ${joinCode}`);
-    if (exam.status !== 'OPEN') {
+
+    // Refuse if not open, or if its end time has passed (auto-close it then).
+    const timedOut = !!exam.endsAt && exam.endsAt < new Date();
+    if (exam.status !== 'OPEN' || timedOut) {
+      if (exam.status === 'OPEN' && timedOut) {
+        await this.prisma.exam.update({
+          where: { id: exam.id },
+          data: { status: 'CLOSED' },
+        });
+      }
       throw new ConflictException(`Exam "${exam.title}" is not open for registration`);
     }
 
@@ -123,7 +151,6 @@ export class ExamsService {
       },
     });
 
-    // The extension needs the session id (for reporting) plus exam context.
     return {
       sessionId: session.id,
       examId: exam.id,
@@ -136,6 +163,31 @@ export class ExamsService {
   async clearAll() {
     const { count } = await this.prisma.exam.deleteMany({});
     return { deletedExams: count };
+  }
+
+  /// Auto-close OPEN exams whose end time has passed, or (as a safeguard) that
+  /// have been open with no end time for longer than MAX_EXAM_OPEN_HOURS. Called
+  /// on the instructor read paths so the view reflects reality. Global + idempotent.
+  private async closeExpiredExams() {
+    const now = new Date();
+    const safeguardCutoff = new Date(now.getTime() - MAX_EXAM_OPEN_HOURS * 3_600_000);
+    await this.prisma.exam.updateMany({
+      where: {
+        status: 'OPEN',
+        OR: [
+          { endsAt: { lt: now } },
+          { endsAt: null, createdAt: { lt: safeguardCutoff } },
+        ],
+      },
+      data: { status: 'CLOSED' },
+    });
+  }
+
+  private parseDate(value: string | undefined, field: string): Date | null {
+    if (!value) return null;
+    const d = new Date(value);
+    if (isNaN(d.getTime())) throw new BadRequestException(`invalid ${field}`);
+    return d;
   }
 
   private async generateUniqueCode(): Promise<string> {

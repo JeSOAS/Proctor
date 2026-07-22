@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
+import { CountBadge, JoinCode, SearchBar, violationClasses } from '../ui';
 
 const SESSION_STYLES: Record<string, string> = {
-  ACTIVE: 'bg-green-100 text-green-700',
-  ENDED: 'bg-gray-200 text-gray-600',
-  DISCONNECTED: 'bg-red-100 text-red-700',
+  ACTIVE: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
+  ENDED: 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
+  DISCONNECTED: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
 };
 
-export function SessionsPanel({ exam, onBack }: { exam: any; onBack: () => void }) {
+export function SessionsPanel({ exam }: { exam: any }) {
   const [status, setStatus] = useState<string>(exam.status);
   const [sessions, setSessions] = useState<any[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [violations, setViolations] = useState<any[]>([]);
+  const [q, setQ] = useState('');
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
@@ -22,7 +24,6 @@ export function SessionsPanel({ exam, onBack }: { exam: any; onBack: () => void 
     }
   }, [exam.id]);
 
-  // Live view: refresh the session list every 5s.
   useEffect(() => {
     load();
     const t = setInterval(load, 5000);
@@ -39,10 +40,7 @@ export function SessionsPanel({ exam, onBack }: { exam: any; onBack: () => void 
   }
 
   async function toggleViolations(id: string) {
-    if (expanded === id) {
-      setExpanded(null);
-      return;
-    }
+    if (expanded === id) return setExpanded(null);
     setExpanded(id);
     setViolations([]);
     try {
@@ -63,83 +61,73 @@ export function SessionsPanel({ exam, onBack }: { exam: any; onBack: () => void 
     }
   }
 
+  const filtered = sessions.filter((s) =>
+    `${s.studentName} ${s.studentId || ''}`.toLowerCase().includes(q.toLowerCase()),
+  );
+
   return (
     <section>
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <h2 className="text-lg font-semibold">{exam.title}</h2>
-          <p className="text-xs text-gray-500">
-            Join code <span className="font-mono font-semibold">{exam.joinCode}</span> · status {status}
-          </p>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3">
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-500 dark:text-gray-400">Join code</span>
+          <JoinCode code={exam.joinCode} />
+          <span className={`text-xs px-2 py-0.5 rounded-full ${status === 'OPEN' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}>
+            {status}
+          </span>
         </div>
         <div className="flex items-center gap-2">
           {status !== 'OPEN' && (
-            <button
-              onClick={() => changeStatus('OPEN')}
-              className="text-sm px-3 py-1 rounded-md bg-green-600 text-white hover:bg-green-700"
-            >
+            <button onClick={() => changeStatus('OPEN')} className="text-sm px-3 py-1 rounded-md bg-green-600 text-white hover:bg-green-700">
               Open
             </button>
           )}
           {status !== 'CLOSED' && (
-            <button
-              onClick={() => changeStatus('CLOSED')}
-              className="text-sm px-3 py-1 rounded-md bg-gray-700 text-white hover:bg-gray-800"
-            >
+            <button onClick={() => changeStatus('CLOSED')} className="text-sm px-3 py-1 rounded-md bg-gray-700 text-white hover:bg-gray-800">
               Close
             </button>
           )}
-          <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-900">
-            ← Exams
-          </button>
         </div>
       </div>
 
-      {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400 mb-3">{error}</p>}
 
-      <p className="text-xs text-gray-400 mb-2">Live — refreshes every 5s.</p>
+      <SearchBar value={q} onChange={setQ} placeholder="Search students…" />
+      <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">Live — refreshes every 5s.</p>
 
       <div className="grid gap-2">
-        {sessions.map((s) => (
-          <div key={s.id} className="bg-white border border-gray-200 rounded-lg">
-            <div className="px-4 py-3 flex items-center justify-between">
-              <button className="text-left" onClick={() => toggleViolations(s.id)}>
+        {filtered.map((s) => (
+          <div key={s.id} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
+            <div className="px-4 py-3 flex items-center justify-between gap-3">
+              <button className="text-left min-w-0" onClick={() => toggleViolations(s.id)}>
                 <div className="font-medium flex items-center gap-2">
-                  {s.studentName}
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded-full ${SESSION_STYLES[s.status] || ''}`}
-                  >
-                    {s.status}
-                  </span>
+                  <span className="text-gray-900 dark:text-gray-100">{s.studentName}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${SESSION_STYLES[s.status] || ''}`}>{s.status}</span>
+                  <CountBadge count={s._count?.violations ?? 0} />
                 </div>
-                <div className="text-xs text-gray-500">
-                  {s.studentId || 'no ID'} · {s._count?.violations ?? 0} event(s) ·{' '}
-                  seen {new Date(s.lastSeenAt).toLocaleTimeString()}
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  {s.studentId || 'no ID'} · seen {new Date(s.lastSeenAt).toLocaleTimeString()}
                 </div>
               </button>
-              <button
-                onClick={() => removeSession(s.id)}
-                className="text-xs text-red-600 hover:underline"
-              >
+              <button onClick={() => removeSession(s.id)} className="text-xs text-red-600 dark:text-red-400 hover:underline shrink-0">
                 Delete
               </button>
             </div>
 
             {expanded === s.id && (
-              <div className="border-t border-gray-100 px-4 py-2 bg-gray-50">
+              <div className="border-t border-gray-100 dark:border-gray-700 px-4 py-2 bg-gray-50 dark:bg-gray-900/40">
                 {violations.length === 0 && (
-                  <p className="text-xs text-gray-400 py-1">No events recorded.</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 py-1">No events recorded.</p>
                 )}
-                <ul className="text-xs divide-y divide-gray-100">
+                <ul className="text-xs divide-y divide-gray-100 dark:divide-gray-700">
                   {violations.map((v) => (
-                    <li key={v.id} className="py-1 flex items-center gap-2">
-                      <span className="font-mono font-semibold text-gray-700 w-32 shrink-0">
+                    <li key={v.id} className="py-1.5 flex items-center gap-2">
+                      <span className={`font-mono font-semibold px-2 py-0.5 rounded w-32 shrink-0 text-center ${violationClasses(v.type)}`}>
                         {v.type}
                       </span>
-                      <span className="text-gray-400 w-20 shrink-0">
+                      <span className="text-gray-400 dark:text-gray-500 w-20 shrink-0">
                         {new Date(v.occurredAt).toLocaleTimeString()}
                       </span>
-                      <span className="text-gray-500 truncate">{v.url || ''}</span>
+                      <span className="text-gray-500 dark:text-gray-400 truncate">{v.url || ''}</span>
                     </li>
                   ))}
                 </ul>
@@ -147,8 +135,10 @@ export function SessionsPanel({ exam, onBack }: { exam: any; onBack: () => void 
             )}
           </div>
         ))}
-        {sessions.length === 0 && (
-          <p className="text-sm text-gray-500">No students have joined yet.</p>
+        {filtered.length === 0 && (
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {sessions.length === 0 ? 'No students have joined yet.' : 'No matches.'}
+          </p>
         )}
       </div>
     </section>

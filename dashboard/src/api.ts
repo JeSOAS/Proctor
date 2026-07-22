@@ -34,16 +34,18 @@ export const api = {
   me: () => req('/auth/me'),
 
   listCourses: () => req('/courses'),
-  createCourse: (name: string, subject: string) =>
-    req('/courses', { method: 'POST', body: JSON.stringify({ name, subject }) }),
+  createCourse: (name: string, year: string, section: string) =>
+    req('/courses', { method: 'POST', body: JSON.stringify({ name, year, section }) }),
   deleteCourse: (id: string) => req(`/courses/${id}`, { method: 'DELETE' }),
 
   listExams: () => req('/exams'),
-  createExam: (courseId: string, title: string, maxWarnings: number) =>
-    req('/exams', {
-      method: 'POST',
-      body: JSON.stringify({ courseId, title, maxWarnings }),
-    }),
+  createExam: (input: {
+    courseId: string;
+    title: string;
+    maxWarnings: number;
+    startsAt?: string;
+    endsAt?: string;
+  }) => req('/exams', { method: 'POST', body: JSON.stringify(input) }),
   setExamStatus: (id: string, status: string) =>
     req(`/exams/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
   deleteExam: (id: string) => req(`/exams/${id}`, { method: 'DELETE' }),

@@ -75,4 +75,4 @@ version published at the same location.
 
 ## Contact
 
-[Institution / Team name] — [contact email]
+[Assumption University of Bangkok / Golden Buns] — [u6530338@au.edu]

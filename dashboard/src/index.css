@@ -1,1 +1,10 @@
 @import "tailwindcss";
+
+/* Class-based dark mode: `dark:` utilities apply when <html> has class `dark`. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root { color-scheme: light; }
+.dark { color-scheme: dark; }
+
+body { background-color: #f9fafb; }
+.dark body { background-color: #111827; }

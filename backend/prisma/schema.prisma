@@ -27,12 +27,12 @@ model Teacher {
   courses      Course[]
 }
 
-/// A course a teacher runs. `subject` is a plain label for now (promote to its
-/// own table only if subjects need to be shared/managed — see docs/DECISIONS.md).
+/// A course a teacher runs, identified by year + name + section (all free-text).
 model Course {
   id        String   @id @default(cuid())
   name      String
-  subject   String?
+  year      String?
+  section   String?
   teacher   Teacher  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
   teacherId String
   createdAt DateTime @default(now())
@@ -51,6 +51,8 @@ model Exam {
   joinCode    String           @unique
   status      String           @default("OPEN") // DRAFT | OPEN | CLOSED
   maxWarnings Int              @default(3)
+  startsAt    DateTime? // scheduled start (informational)
+  endsAt      DateTime? // if set, the exam auto-closes at this time (the "timer")
   createdAt   DateTime         @default(now())
   course      Course?          @relation(fields: [courseId], references: [id], onDelete: Cascade)
   courseId    String?
