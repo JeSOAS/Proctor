@@ -51,8 +51,10 @@ model Exam {
   joinCode    String           @unique
   status      String           @default("OPEN") // DRAFT | OPEN | CLOSED
   maxWarnings Int              @default(3)
-  startsAt    DateTime? // scheduled start (informational)
+  startsAt    DateTime? // scheduled/planned start
   endsAt      DateTime? // if set, the exam auto-closes at this time (the "timer")
+  openedAt    DateTime? // when it actually became OPEN (created / reopened)
+  closedAt    DateTime? // when it actually closed
   createdAt   DateTime         @default(now())
   course      Course?          @relation(fields: [courseId], references: [id], onDelete: Cascade)
   courseId    String?

@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
-import { CountBadge, JoinCode, SearchBar, violationClasses } from '../ui';
+import { JoinCode, SearchBar, StatusPill, WarningBadge, violationClasses } from '../ui';
 
-const SESSION_STYLES: Record<string, string> = {
-  ACTIVE: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
-  ENDED: 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
-  DISCONNECTED: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+const fmt = (d?: string) => (d ? new Date(d).toLocaleString() : null);
+const time = (d?: string) => (d ? new Date(d).toLocaleTimeString() : null);
+const range = (a?: string, b?: string) => {
+  const s = fmt(a);
+  const e = fmt(b);
+  if (!s && !e) return '—';
+  return `${s || '—'} → ${e || 'ongoing'}`;
 };
 
 export function SessionsPanel({ exam }: { exam: any }) {
@@ -65,9 +68,14 @@ export function SessionsPanel({ exam }: { exam: any }) {
     `${s.studentName} ${s.studentId || ''}`.toLowerCase().includes(q.toLowerCase()),
   );
 
+  const scheduled = !!(exam.startsAt || exam.endsAt);
+  const examClosed = status === 'CLOSED';
+  const max = exam.maxWarnings ?? 3;
+
   return (
     <section>
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3">
+      {/* Header: join code + open/close */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3">
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-500 dark:text-gray-400">Join code</span>
           <JoinCode code={exam.joinCode} />
@@ -89,6 +97,15 @@ export function SessionsPanel({ exam }: { exam: any }) {
         </div>
       </div>
 
+      {/* Exam info */}
+      <div className="text-xs text-gray-500 dark:text-gray-400 mb-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3 grid gap-1 sm:grid-cols-2">
+        <div>Type: <span className="text-gray-700 dark:text-gray-300">{scheduled ? 'Scheduled' : 'Manual'}</span></div>
+        <div>Max warnings: <span className="text-gray-700 dark:text-gray-300">{max}</span></div>
+        <div>Planned: <span className="text-gray-700 dark:text-gray-300">{range(exam.startsAt, exam.endsAt)}</span></div>
+        <div>Actual: <span className="text-gray-700 dark:text-gray-300">{range(exam.openedAt, exam.closedAt)}</span></div>
+        <div>Created: <span className="text-gray-700 dark:text-gray-300">{fmt(exam.createdAt) || '—'}</span></div>
+      </div>
+
       {error && <p className="text-sm text-red-600 dark:text-red-400 mb-3">{error}</p>}
 
       <SearchBar value={q} onChange={setQ} placeholder="Search students…" />
@@ -99,16 +116,18 @@ export function SessionsPanel({ exam }: { exam: any }) {
           <div key={s.id} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
             <div className="px-4 py-3 flex items-center justify-between gap-3">
               <button className="text-left min-w-0" onClick={() => toggleViolations(s.id)}>
-                <div className="font-medium flex items-center gap-2">
+                <div className="font-medium flex flex-wrap items-center gap-2">
+                  <StatusPill session={s} examClosed={examClosed} />
                   <span className="text-gray-900 dark:text-gray-100">{s.studentName}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${SESSION_STYLES[s.status] || ''}`}>{s.status}</span>
-                  <CountBadge count={s._count?.violations ?? 0} />
+                  <WarningBadge count={s.concerningCount ?? 0} max={max} />
                 </div>
                 <div className="text-xs text-gray-500 dark:text-gray-400">
-                  {s.studentId || 'no ID'} · seen {new Date(s.lastSeenAt).toLocaleTimeString()}
+                  {s.studentId || 'no ID'} · joined {time(s.startedAt)}
+                  {s.endedAt && <> · left {time(s.endedAt)}</>}
+                  {' '}· seen {time(s.lastSeenAt)} · {s._count?.violations ?? 0} event(s)
                 </div>
               </button>
-              <button onClick={() => removeSession(s.id)} className="text-xs text-red-600 dark:text-red-400 hover:underline shrink-0">
+              <button onClick={() => removeSession(s.id)} className="text-xs font-medium px-3 py-1.5 rounded-md border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 shrink-0">
                 Delete
               </button>
             </div>

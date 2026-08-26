@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { api } from '../api';
-import { JoinCode, SearchBar } from '../ui';
+import { HelpIcon, JoinCode, SearchBar } from '../ui';
 
 const STATUS_STYLES: Record<string, string> = {
   OPEN: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
@@ -75,13 +75,22 @@ export function ExamsPanel({ course, onOpen }: { course: any; onOpen: (exam: any
     }
   }
 
+  async function changeStatus(id: string, status: string) {
+    try {
+      await api.setExamStatus(id, status);
+      load();
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+
   const filtered = exams.filter((e) =>
     `${e.title} ${e.joinCode}`.toLowerCase().includes(q.toLowerCase()),
   );
 
   return (
     <section>
-      <form onSubmit={create} className="mb-1 space-y-2">
+      <form onSubmit={create} className="mb-4 space-y-2">
         <div className="flex flex-wrap gap-2">
           <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Exam title" className={`flex-1 min-w-48 ${input}`} />
           <label className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
@@ -95,7 +104,10 @@ export function ExamsPanel({ course, onOpen }: { course: any; onOpen: (exam: any
             <input type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} className={`block mt-1 ${input}`} />
           </label>
           <label className="text-xs text-gray-500 dark:text-gray-400">
-            End time / auto-close (optional)
+            <span className="inline-flex items-center gap-1">
+              End time / auto-close (optional)
+              <HelpIcon text="Leave empty to end the exam yourself. If set, the exam closes automatically at that time. Any exam left open with no end time auto-closes after 24 hours." />
+            </span>
             <input type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} className={`block mt-1 ${input}`} />
           </label>
           <button className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">
@@ -103,10 +115,6 @@ export function ExamsPanel({ course, onOpen }: { course: any; onOpen: (exam: any
           </button>
         </div>
       </form>
-      <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-        Leave <b>End time</b> empty to end the exam yourself; if set, the exam closes
-        automatically at that time. Any exam left open with no end time auto-closes after 24&nbsp;hours.
-      </p>
 
       {error && <p className="text-sm text-red-600 dark:text-red-400 mb-3">{error}</p>}
 
@@ -134,10 +142,31 @@ export function ExamsPanel({ course, onOpen }: { course: any; onOpen: (exam: any
                 </div>
               </div>
               <div className="flex flex-col items-end gap-2 shrink-0">
-                <button onClick={() => onOpen(e)} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
-                  Open →
+                <button
+                  onClick={() => onOpen(e)}
+                  className="text-xs font-medium px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 w-24 text-center"
+                >
+                  Monitor →
                 </button>
-                <button onClick={() => remove(e.id)} className="text-xs text-red-600 dark:text-red-400 hover:underline">
+                {e.status === 'CLOSED' ? (
+                  <button
+                    onClick={() => changeStatus(e.id, 'OPEN')}
+                    className="text-xs font-medium px-3 py-1.5 rounded-md border border-green-300 dark:border-green-800 text-green-700 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/30 w-24 text-center"
+                  >
+                    Reopen
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => changeStatus(e.id, 'CLOSED')}
+                    className="text-xs font-medium px-3 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 w-24 text-center"
+                  >
+                    Close
+                  </button>
+                )}
+                <button
+                  onClick={() => remove(e.id)}
+                  className="text-xs font-medium px-3 py-1.5 rounded-md border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 w-24 text-center"
+                >
                   Delete
                 </button>
               </div>

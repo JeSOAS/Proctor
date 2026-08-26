@@ -15,6 +15,18 @@ const CODE_LENGTH = 6;
 // is auto-closed, so a forgotten exam can't stay open indefinitely.
 const MAX_EXAM_OPEN_HOURS = 24;
 
+// Event types that count as a "warning" for the violation thresholds (excludes
+// benign WINDOW_FOCUS / TAB_CLOSED). Keep in sync with the dashboard's ui.tsx.
+const CONCERNING_TYPES = [
+  'WINDOW_BLUR',
+  'TAB_SWITCH',
+  'TAB_NAVIGATE',
+  'TAB_CREATED',
+  'COPY',
+  'PASTE',
+  'CUT',
+];
+
 // Ownership is enforced through the chain Exam -> Course -> Teacher: every query
 // filters by the teacher, so a teacher can only ever touch their own exams.
 @Injectable()
@@ -62,6 +74,7 @@ export class ExamsService {
           typeof input.maxWarnings === 'number' ? input.maxWarnings : undefined,
         startsAt,
         endsAt,
+        openedAt: new Date(),
       },
     });
   }
@@ -94,11 +107,22 @@ export class ExamsService {
 
   async listExamSessions(teacherId: string, examId: string) {
     await this.getExam(teacherId, examId); // ownership check + stale expiry
-    return this.prisma.studentSession.findMany({
+    const sessions = await this.prisma.studentSession.findMany({
       where: { examId },
       orderBy: { startedAt: 'asc' },
       include: { _count: { select: { violations: true } } },
     });
+    // Concerning-only counts per session, for the warning thresholds.
+    const ids = sessions.map((s) => s.id);
+    const grouped = ids.length
+      ? await this.prisma.violation.groupBy({
+          by: ['sessionId'],
+          where: { sessionId: { in: ids }, type: { in: CONCERNING_TYPES } },
+          _count: { _all: true },
+        })
+      : [];
+    const concerning = new Map(grouped.map((g) => [g.sessionId, g._count._all]));
+    return sessions.map((s) => ({ ...s, concerningCount: concerning.get(s.id) ?? 0 }));
   }
 
   async setStatus(teacherId: string, id: string, status: string) {
@@ -106,8 +130,14 @@ export class ExamsService {
     if (!allowed.includes(status)) {
       throw new BadRequestException(`status must be one of ${allowed.join(', ')}`);
     }
-    await this.getExam(teacherId, id); // ownership check
-    return this.prisma.exam.update({ where: { id }, data: { status } });
+    const exam = await this.getExam(teacherId, id); // ownership check
+    const data: { status: string; openedAt?: Date; closedAt?: Date | null } = { status };
+    if (status === 'OPEN') {
+      data.closedAt = null; // reopened
+      if (!exam.openedAt) data.openedAt = new Date();
+    }
+    if (status === 'CLOSED') data.closedAt = new Date();
+    return this.prisma.exam.update({ where: { id }, data });
   }
 
   async deleteExam(teacherId: string, id: string) {
@@ -139,7 +169,7 @@ export class ExamsService {
       if (exam.status === 'OPEN' && timedOut) {
         await this.prisma.exam.update({
           where: { id: exam.id },
-          data: { status: 'CLOSED' },
+          data: { status: 'CLOSED', closedAt: now },
         });
       }
       const reason = notStarted ? 'has not started yet' : 'is not open for registration';
@@ -188,7 +218,7 @@ export class ExamsService {
           { endsAt: null, startsAt: { lt: safeguardCutoff } },
         ],
       },
-      data: { status: 'CLOSED' },
+      data: { status: 'CLOSED', closedAt: now },
     });
   }
 

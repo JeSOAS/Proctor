@@ -94,10 +94,16 @@ export function CoursesPanel({ onOpen }: { onOpen: (course: any) => void }) {
                 <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{c.section || '—'}</td>
                 <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{c._count?.exams ?? 0}</td>
                 <td className="px-4 py-3 text-right whitespace-nowrap">
-                  <button onClick={() => onOpen(c)} className="text-xs text-blue-600 dark:text-blue-400 hover:underline mr-3">
-                    Open
+                  <button
+                    onClick={() => onOpen(c)}
+                    className="text-xs font-medium px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 mr-2"
+                  >
+                    Open →
                   </button>
-                  <button onClick={() => remove(c.id)} className="text-xs text-red-600 dark:text-red-400 hover:underline">
+                  <button
+                    onClick={() => remove(c.id)}
+                    className="text-xs font-medium px-3 py-1.5 rounded-md border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30"
+                  >
                     Delete
                   </button>
                 </td>
