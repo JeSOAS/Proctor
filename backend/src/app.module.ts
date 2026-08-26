@@ -18,6 +18,20 @@ import { SessionsModule } from './sessions/sessions.module';
         process.env.DASHBOARD_DIST ||
         join(__dirname, '..', '..', 'dashboard', 'dist'),
       serveRoot: '/dashboard',
+      serveStaticOptions: {
+        // Vite content-hashes everything under assets/ (the filename changes
+        // whenever the content does), so those files can be cached forever —
+        // repeat dashboard loads then skip re-downloading the JS/CSS entirely.
+        // index.html and other unhashed files must stay fresh, or a new deploy
+        // would never reach a returning browser.
+        setHeaders: (res, filePath) => {
+          if (/[\\/]assets[\\/]/.test(filePath)) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          } else {
+            res.setHeader('Cache-Control', 'no-cache');
+          }
+        },
+      },
     }),
     PrismaModule,
     AuthModule,

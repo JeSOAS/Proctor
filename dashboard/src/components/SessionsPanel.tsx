@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { HelpIcon, JoinCode, SearchBar, StatusPill, WarningBadge, btn, violationClasses } from '../ui';
 import { ExamSettings } from './ExamSettings';
@@ -30,18 +30,48 @@ export function SessionsPanel({ exam }: { exam: any }) {
   // Kept in sync with the settings panel so the warning badges use the live max.
   const [max, setMax] = useState<number>(exam.maxWarnings ?? 3);
 
+  // The poll reads the currently expanded session through a ref so refreshing
+  // the open event log never forces the 5s timer to restart on every expand.
+  const expandedRef = useRef<string | null>(null);
+  useEffect(() => {
+    expandedRef.current = expanded;
+  }, [expanded]);
+
   const load = useCallback(async () => {
     try {
       setSessions(await api.examSessions(exam.id));
+      setError('');
+      // If a student's log is open, refresh it too so "live" actually stays
+      // live (otherwise the expanded events freeze until you re-click).
+      const openId = expandedRef.current;
+      if (openId) setViolations(await api.sessionViolations(openId));
     } catch (e: any) {
       setError(e.message);
     }
   }, [exam.id]);
 
+  // Live refresh, but well-behaved:
+  //   - skip polling while the tab is hidden (no wasted load on the VM), and
+  //     refresh immediately when the instructor switches back;
+  //   - self-scheduling timer: the next poll is queued only after the current
+  //     one resolves, so a slow response can't let requests stack up.
   useEffect(() => {
-    load();
-    const t = setInterval(load, 5000);
-    return () => clearInterval(t);
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = async () => {
+      if (!document.hidden) await load();
+      if (!cancelled) timer = setTimeout(tick, 5000);
+    };
+    tick();
+    const onVisible = () => {
+      if (!document.hidden) load();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [load]);
 
   async function changeStatus(next: string) {
