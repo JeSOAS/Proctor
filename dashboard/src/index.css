@@ -6,5 +6,8 @@
 :root { color-scheme: light; }
 .dark { color-scheme: dark; }
 
+/* Base type scale. Tailwind sizes/spacing are rem-based, so bumping this one
+   value scales the whole UI (text AND layout) together — no relative shifting. */
+html { font-size: 18px; }
 body { background-color: #f9fafb; }
 .dark body { background-color: #111827; }

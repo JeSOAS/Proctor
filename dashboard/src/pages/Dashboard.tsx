@@ -58,6 +58,14 @@ export function Dashboard({ teacher, onLogout }: { teacher: any; onLogout: () =>
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-6">
+        {(course || exam) && (
+          <button
+            onClick={() => (exam ? setExam(null) : setCourse(null))}
+            className="mb-3 inline-flex items-center gap-1 text-sm px-3 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+          >
+            ← Back
+          </button>
+        )}
         <nav className="text-sm mb-2 flex items-center gap-1 text-gray-400 dark:text-gray-500">
           <button className={`${crumb} ${!course ? active : ''}`} onClick={() => { setCourse(null); setExam(null); }}>
             Courses

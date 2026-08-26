@@ -48,6 +48,8 @@ export const api = {
   }) => req('/exams', { method: 'POST', body: JSON.stringify(input) }),
   setExamStatus: (id: string, status: string) =>
     req(`/exams/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
+  updateExam: (id: string, patch: Record<string, unknown>) =>
+    req(`/exams/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   deleteExam: (id: string) => req(`/exams/${id}`, { method: 'DELETE' }),
   examSessions: (id: string) => req(`/exams/${id}/sessions`),
 

@@ -5,6 +5,7 @@ import {
   Get,
   Headers,
   Param,
+  Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -51,6 +52,16 @@ export class ExamsController {
     @Body() body: any,
   ) {
     return this.examsService.setStatus(teacher.id, id, body?.status);
+  }
+
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard)
+  update(
+    @CurrentTeacher() teacher: CurrentTeacherData,
+    @Param('id') id: string,
+    @Body() body: any,
+  ) {
+    return this.examsService.updateExam(teacher.id, id, body ?? {});
   }
 
   @Delete(':id')

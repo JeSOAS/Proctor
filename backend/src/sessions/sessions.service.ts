@@ -156,7 +156,12 @@ export class SessionsService {
   private async touchSession(id: string) {
     const s = await this.prisma.studentSession.findUnique({
       where: { id },
-      select: { id: true, status: true, disconnectedAt: true },
+      select: {
+        id: true,
+        status: true,
+        disconnectedAt: true,
+        exam: { select: { disconnectGraceSec: true } },
+      },
     });
     if (!s || s.status === 'ENDED') {
       throw new NotFoundException(`Session ${id} not found or already ended`);
@@ -166,7 +171,8 @@ export class SessionsService {
       const gapSec = s.disconnectedAt
         ? Math.round((now.getTime() - s.disconnectedAt.getTime()) / 1000)
         : 0;
-      const concerning = gapSec >= SIGNIFICANT_DISCONNECT_SEC;
+      const graceSec = s.exam?.disconnectGraceSec ?? SIGNIFICANT_DISCONNECT_SEC;
+      const concerning = gapSec >= graceSec;
       await this.prisma.$transaction([
         this.prisma.studentSession.update({
           where: { id },

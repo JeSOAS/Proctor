@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
+import { CONCERNING_TYPES } from '../common/violation-types';
 
 // Join-code alphabet: no 0/O/1/I/L to avoid students mistyping the code.
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -14,19 +15,6 @@ const CODE_LENGTH = 6;
 // Safeguard: an OPEN exam with no end time that has been open longer than this
 // is auto-closed, so a forgotten exam can't stay open indefinitely.
 const MAX_EXAM_OPEN_HOURS = 24;
-
-// Event types that count as a "warning" for the violation thresholds (excludes
-// benign WINDOW_FOCUS / TAB_CLOSED). Keep in sync with the dashboard's ui.tsx.
-const CONCERNING_TYPES = [
-  'WINDOW_BLUR',
-  'TAB_SWITCH',
-  'TAB_NAVIGATE',
-  'TAB_CREATED',
-  'COPY',
-  'PASTE',
-  'CUT',
-  'LONG_DISCONNECT', // a significant disconnect gap
-];
 
 // Ownership is enforced through the chain Exam -> Course -> Teacher: every query
 // filters by the teacher, so a teacher can only ever touch their own exams.
@@ -147,6 +135,42 @@ export class ExamsService {
     return { deleted: true };
   }
 
+  /// Update exam settings (advanced panel).
+  async updateExam(
+    teacherId: string,
+    id: string,
+    input: {
+      maxWarnings?: number;
+      disconnectGraceSec?: number;
+      autoClose?: boolean;
+      notifyStudent?: boolean;
+    },
+  ) {
+    await this.getExam(teacherId, id); // ownership check
+    const data: {
+      maxWarnings?: number;
+      disconnectGraceSec?: number;
+      autoClose?: boolean;
+      notifyStudent?: boolean;
+    } = {};
+    if (typeof input.maxWarnings === 'number') {
+      if (input.maxWarnings < 1) throw new BadRequestException('maxWarnings must be at least 1');
+      data.maxWarnings = Math.floor(input.maxWarnings);
+    }
+    if (typeof input.disconnectGraceSec === 'number') {
+      if (input.disconnectGraceSec < 0) {
+        throw new BadRequestException('disconnectGraceSec must be >= 0');
+      }
+      data.disconnectGraceSec = Math.floor(input.disconnectGraceSec);
+    }
+    if (typeof input.autoClose === 'boolean') data.autoClose = input.autoClose;
+    if (typeof input.notifyStudent === 'boolean') data.notifyStudent = input.notifyStudent;
+    if (Object.keys(data).length === 0) {
+      throw new BadRequestException('nothing to update');
+    }
+    return this.prisma.exam.update({ where: { id }, data });
+  }
+
   /// Student registration (open — the extension calls this, no teacher auth).
   async register(
     joinCode: string,
@@ -191,6 +215,7 @@ export class ExamsService {
       examId: exam.id,
       examTitle: exam.title,
       maxWarnings: exam.maxWarnings,
+      notifyStudent: exam.notifyStudent,
     };
   }
 

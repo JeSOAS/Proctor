@@ -51,6 +51,14 @@ model Exam {
   joinCode    String           @unique
   status      String           @default("OPEN") // DRAFT | OPEN | CLOSED
   maxWarnings Int              @default(3)
+  /// A disconnect gap at least this long (seconds) counts as a warning; shorter
+  /// drops are recorded but not counted. Configurable per exam.
+  disconnectGraceSec Int       @default(180)
+  /// Toggle: end (auto-close) a student's session once they hit maxWarnings.
+  autoClose   Boolean          @default(false)
+  /// Toggle: let the extension warn the student on violations (requires an
+  /// extension release to take effect).
+  notifyStudent Boolean        @default(false)
   startsAt    DateTime? // scheduled/planned start
   endsAt      DateTime? // if set, the exam auto-closes at this time (the "timer")
   openedAt    DateTime? // when it actually became OPEN (created / reopened)

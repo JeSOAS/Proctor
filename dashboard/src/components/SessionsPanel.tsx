@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
-import { JoinCode, SearchBar, StatusPill, WarningBadge, violationClasses } from '../ui';
+import { HelpIcon, JoinCode, SearchBar, StatusPill, WarningBadge, violationClasses } from '../ui';
 
 const fmt = (d?: string) => (d ? new Date(d).toLocaleString() : null);
 const time = (d?: string) => (d ? new Date(d).toLocaleTimeString() : null);
@@ -25,6 +25,14 @@ export function SessionsPanel({ exam }: { exam: any }) {
   const [violations, setViolations] = useState<any[]>([]);
   const [q, setQ] = useState('');
   const [error, setError] = useState('');
+
+  // Advanced settings (max/grace are functional; the two toggles are stubs).
+  const [max, setMax] = useState<number>(exam.maxWarnings ?? 3);
+  const [graceSec, setGraceSec] = useState<number>(exam.disconnectGraceSec ?? 180);
+  const [notify, setNotify] = useState<boolean>(!!exam.notifyStudent);
+  const [autoClose, setAutoClose] = useState<boolean>(!!exam.autoClose);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [savedMsg, setSavedMsg] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -71,13 +79,28 @@ export function SessionsPanel({ exam }: { exam: any }) {
     }
   }
 
+  async function saveSettings() {
+    setSavedMsg('');
+    try {
+      await api.updateExam(exam.id, {
+        maxWarnings: max,
+        disconnectGraceSec: graceSec,
+        notifyStudent: notify,
+        autoClose,
+      });
+      setSavedMsg('Saved');
+      setTimeout(() => setSavedMsg(''), 1500);
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+
   const filtered = sessions.filter((s) =>
     `${s.studentName} ${s.studentId || ''}`.toLowerCase().includes(q.toLowerCase()),
   );
 
   const scheduled = !!(exam.startsAt || exam.endsAt);
   const examClosed = status === 'CLOSED';
-  const max = exam.maxWarnings ?? 3;
 
   return (
     <section>
@@ -111,6 +134,55 @@ export function SessionsPanel({ exam }: { exam: any }) {
         <div>Planned: <span className="text-gray-700 dark:text-gray-300">{range(exam.startsAt, exam.endsAt)}</span></div>
         <div>Actual: <span className="text-gray-700 dark:text-gray-300">{range(exam.openedAt, exam.closedAt)}</span></div>
         <div>Created: <span className="text-gray-700 dark:text-gray-300">{fmt(exam.createdAt) || '—'}</span></div>
+      </div>
+
+      {/* Advanced settings (collapsed by default) */}
+      <div className="mb-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
+        <button
+          onClick={() => setSettingsOpen((o) => !o)}
+          className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300"
+        >
+          <span>Advanced settings</span>
+          <span className="text-gray-400">{settingsOpen ? '▾' : '▸'}</span>
+        </button>
+        {settingsOpen && (
+          <div className="border-t border-gray-100 dark:border-gray-700 px-4 py-3 grid gap-3 sm:grid-cols-2 text-sm">
+            <label className="flex items-center justify-between gap-2">
+              <span className="text-gray-600 dark:text-gray-300">Max warnings</span>
+              <input type="number" min={1} value={max} onChange={(e) => setMax(Number(e.target.value))}
+                className="w-20 px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" />
+            </label>
+            <label className="flex items-center justify-between gap-2">
+              <span className="inline-flex items-center gap-1 text-gray-600 dark:text-gray-300">
+                Disconnect grace (sec)
+                <HelpIcon text="A disconnect shorter than this is recorded but NOT counted as a warning; longer gaps count." />
+              </span>
+              <input type="number" min={0} value={graceSec} onChange={(e) => setGraceSec(Number(e.target.value))}
+                className="w-20 px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100" />
+            </label>
+            <label className="flex items-center justify-between gap-2">
+              <span className="inline-flex items-center gap-1 text-gray-600 dark:text-gray-300">
+                Notify students of violations
+                <HelpIcon text="When on, students are warned on their own screen and shown remaining warnings. Not active yet — needs an extension update." />
+              </span>
+              <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} className="w-4 h-4" />
+            </label>
+            <label className="flex items-center justify-between gap-2">
+              <span className="inline-flex items-center gap-1 text-gray-600 dark:text-gray-300">
+                Auto-close on limit
+                <HelpIcon text="When on, a student's proctoring auto-closes once they hit the max warnings (recorded in the log). Not active yet." />
+              </span>
+              <input type="checkbox" checked={autoClose} onChange={(e) => setAutoClose(e.target.checked)} className="w-4 h-4" />
+            </label>
+            <div className="sm:col-span-2 flex items-center gap-3 pt-1">
+              <button onClick={saveSettings} className="px-4 py-1.5 rounded-md bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">
+                Save settings
+              </button>
+              {savedMsg && <span className="text-xs text-green-600 dark:text-green-400">{savedMsg}</span>}
+              <span className="text-xs text-gray-400 dark:text-gray-500">The two toggles are stubs — behaviour comes later.</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {error && <p className="text-sm text-red-600 dark:text-red-400 mb-3">{error}</p>}
