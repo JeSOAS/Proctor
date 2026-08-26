@@ -71,13 +71,17 @@ model StudentSession {
   examId      String
   studentName String
   studentId   String? // optional university/student number
-  status      String      @default("ACTIVE") // ACTIVE | ENDED | DISCONNECTED
-  startedAt   DateTime    @default(now())
-  endedAt     DateTime?
+  status         String   @default("ACTIVE") // ACTIVE | DISCONNECTED | ENDED
+  startedAt      DateTime @default(now())
+  endedAt        DateTime?
+  endedReason    String? // LEFT (pressed Leave) | TIMEOUT (disconnected too long)
+  /// Set when heartbeats stop (status DISCONNECTED). Cleared when the session
+  /// resumes. If it stays DISCONNECTED past the resume window, it becomes ENDED.
+  disconnectedAt DateTime?
   /// Bumped by every heartbeat/violation. ACTIVE sessions whose lastSeenAt is
-  /// older than the stale timeout are auto-marked ENDED (browser was closed —
+  /// older than the stale timeout are marked DISCONNECTED (heartbeats stopped —
   /// MV3 workers die without a shutdown event, so we can't report it directly).
-  lastSeenAt  DateTime    @default(now())
+  lastSeenAt     DateTime @default(now())
   userAgent   String?
   violations  Violation[]
 

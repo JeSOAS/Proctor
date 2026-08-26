@@ -1,10 +1,16 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
-// An ACTIVE session whose last heartbeat is older than this is considered
-// abandoned (browser closed / extension removed) and auto-marked ENDED.
-// The extension heartbeats every 30s, so 90s = three missed beats.
+// The extension heartbeats every 30s. An ACTIVE session with no beat for this
+// long is marked DISCONNECTED (heartbeats stopped — network drop / sleep /
+// extension off / browser closed, indistinguishable from the server).
 const STALE_TIMEOUT_MS = 90_000;
+// A DISCONNECTED session can resume (same session) within this window; after it,
+// the session is terminally ENDED and a return means a fresh join.
+const RESUME_WINDOW_MS = 10 * 60_000;
+// A disconnect gap at least this long counts as a real ("concerning") warning;
+// shorter blips are recorded but not counted toward the limit.
+const SIGNIFICANT_DISCONNECT_SEC = 180;
 
 @Injectable()
 export class SessionsService {
@@ -12,11 +18,12 @@ export class SessionsService {
 
   // ---- Student-facing (open — called by the extension, no auth) ----
 
+  /// Explicit "Leave exam" from the popup — a deliberate, terminal end.
   async endSession(id: string) {
     await this.ensureSessionExists(id);
     return this.prisma.studentSession.update({
       where: { id },
-      data: { status: 'ENDED', endedAt: new Date() },
+      data: { status: 'ENDED', endedAt: new Date(), endedReason: 'LEFT' },
     });
   }
 
@@ -112,34 +119,74 @@ export class SessionsService {
     return { deleted: true };
   }
 
-  /// Mark ACTIVE sessions whose heartbeat has gone stale as ENDED. Called by the
-  /// exams read paths so the instructor view reflects who is really live.
+  /// Move sessions through the disconnect lifecycle. Called by the exams read
+  /// paths so the instructor view reflects reality.
+  ///   ACTIVE, no beat for STALE_TIMEOUT   -> DISCONNECTED (recording when)
+  ///   DISCONNECTED past the resume window -> ENDED (reason TIMEOUT)
   async expireStale() {
-    const cutoff = new Date(Date.now() - STALE_TIMEOUT_MS);
+    const now = Date.now();
+    const staleCutoff = new Date(now - STALE_TIMEOUT_MS);
+    const graceCutoff = new Date(now - RESUME_WINDOW_MS);
+
     const stale = await this.prisma.studentSession.findMany({
-      where: { status: 'ACTIVE', lastSeenAt: { lt: cutoff } },
+      where: { status: 'ACTIVE', lastSeenAt: { lt: staleCutoff } },
       select: { id: true, lastSeenAt: true },
     });
     for (const s of stale) {
       await this.prisma.studentSession.update({
         where: { id: s.id },
-        data: { status: 'ENDED', endedAt: s.lastSeenAt },
+        data: { status: 'DISCONNECTED', disconnectedAt: s.lastSeenAt },
       });
     }
+
+    await this.prisma.studentSession.updateMany({
+      where: { status: 'DISCONNECTED', disconnectedAt: { lt: graceCutoff } },
+      data: { status: 'ENDED', endedAt: new Date(), endedReason: 'TIMEOUT' },
+    });
   }
 
   // ---- helpers ----
 
-  /// Bump lastSeenAt; 404 if the session doesn't exist OR is already ENDED, so
-  /// the extension knows to re-register instead of writing into a closed session.
+  /// Keep a session alive on heartbeat/violation.
+  ///  - ACTIVE       -> bump lastSeenAt.
+  ///  - DISCONNECTED -> resume it and record the gap (RECONNECT, or
+  ///                    LONG_DISCONNECT if significant), so a brief drop doesn't
+  ///                    split into a new session.
+  ///  - ENDED / gone -> 404, so the extension re-registers (fresh join).
   private async touchSession(id: string) {
-    const { count } = await this.prisma.studentSession.updateMany({
-      where: { id, status: 'ACTIVE' },
-      data: { lastSeenAt: new Date() },
+    const s = await this.prisma.studentSession.findUnique({
+      where: { id },
+      select: { id: true, status: true, disconnectedAt: true },
     });
-    if (count === 0) {
+    if (!s || s.status === 'ENDED') {
       throw new NotFoundException(`Session ${id} not found or already ended`);
     }
+    const now = new Date();
+    if (s.status === 'DISCONNECTED') {
+      const gapSec = s.disconnectedAt
+        ? Math.round((now.getTime() - s.disconnectedAt.getTime()) / 1000)
+        : 0;
+      const concerning = gapSec >= SIGNIFICANT_DISCONNECT_SEC;
+      await this.prisma.$transaction([
+        this.prisma.studentSession.update({
+          where: { id },
+          data: { status: 'ACTIVE', lastSeenAt: now, disconnectedAt: null },
+        }),
+        this.prisma.violation.create({
+          data: {
+            sessionId: id,
+            type: concerning ? 'LONG_DISCONNECT' : 'RECONNECT',
+            payload: JSON.stringify({ seconds: gapSec }),
+            occurredAt: s.disconnectedAt ?? now,
+          },
+        }),
+      ]);
+      return;
+    }
+    await this.prisma.studentSession.update({
+      where: { id },
+      data: { lastSeenAt: now },
+    });
   }
 
   private async ensureSessionExists(id: string) {

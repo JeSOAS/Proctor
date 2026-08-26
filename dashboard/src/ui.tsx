@@ -85,6 +85,7 @@ const CONCERNING = new Set([
   'COPY',
   'PASTE',
   'CUT',
+  'LONG_DISCONNECT',
 ]);
 
 export function isConcerning(type: string) {
@@ -123,21 +124,41 @@ const PILL: Record<string, string> = {
   green: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
   amber: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
   red: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+  gray: 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
 };
-const DOT: Record<string, string> = { green: 'bg-green-500', amber: 'bg-amber-500', red: 'bg-red-500' };
+const DOT: Record<string, string> = {
+  green: 'bg-green-500',
+  amber: 'bg-amber-500',
+  red: 'bg-red-500',
+  gray: 'bg-gray-400',
+};
 
-/// Live connection status from heartbeat freshness. Hidden once the exam closes.
+/// Live connection status. Hidden once the exam closes.
+///  Online (green) / Not responding (amber) / Disconnected (red) / Left (gray).
 export function StatusPill({ session, examClosed }: { session: any; examClosed: boolean }) {
   if (examClosed) return null;
-  const age = Date.now() - new Date(session.lastSeenAt).getTime();
   let label = 'Online';
   let color = 'green';
-  if (session.status !== 'ACTIVE' || age >= 90_000) {
+  if (session.status === 'ENDED') {
+    if (session.endedReason === 'LEFT') {
+      label = 'Left';
+      color = 'gray';
+    } else {
+      label = 'Disconnected';
+      color = 'red';
+    }
+  } else if (session.status === 'DISCONNECTED') {
     label = 'Disconnected';
     color = 'red';
-  } else if (age >= 45_000) {
-    label = 'Not responding';
-    color = 'amber';
+  } else {
+    const age = Date.now() - new Date(session.lastSeenAt).getTime();
+    if (age >= 90_000) {
+      label = 'Disconnected';
+      color = 'red';
+    } else if (age >= 45_000) {
+      label = 'Not responding';
+      color = 'amber';
+    }
   }
   return (
     <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${PILL[color]}`}>

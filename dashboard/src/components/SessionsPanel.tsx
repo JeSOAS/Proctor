@@ -10,6 +10,13 @@ const range = (a?: string, b?: string) => {
   if (!s && !e) return '—';
   return `${s || '—'} → ${e || 'ongoing'}`;
 };
+const fmtGap = (sec?: number) => {
+  if (sec == null) return '';
+  if (sec < 60) return `${sec}s`;
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return s ? `${m}m ${s}s` : `${m}m`;
+};
 
 export function SessionsPanel({ exam }: { exam: any }) {
   const [status, setStatus] = useState<string>(exam.status);
@@ -123,7 +130,9 @@ export function SessionsPanel({ exam }: { exam: any }) {
                 </div>
                 <div className="text-xs text-gray-500 dark:text-gray-400">
                   {s.studentId || 'no ID'} · joined {time(s.startedAt)}
-                  {s.endedAt && <> · left {time(s.endedAt)}</>}
+                  {s.endedAt && (
+                    <> · {s.endedReason === 'LEFT' ? 'left' : s.endedReason === 'TIMEOUT' ? 'timed out' : 'ended'} {time(s.endedAt)}</>
+                  )}
                   {' '}· seen {time(s.lastSeenAt)} · {s._count?.violations ?? 0} event(s)
                 </div>
               </button>
@@ -146,7 +155,11 @@ export function SessionsPanel({ exam }: { exam: any }) {
                       <span className="text-gray-400 dark:text-gray-500 w-20 shrink-0">
                         {new Date(v.occurredAt).toLocaleTimeString()}
                       </span>
-                      <span className="text-gray-500 dark:text-gray-400 truncate">{v.url || ''}</span>
+                      <span className="text-gray-500 dark:text-gray-400 truncate">
+                        {v.type === 'RECONNECT' || v.type === 'LONG_DISCONNECT'
+                          ? `offline ${fmtGap(v.payload?.seconds)}`
+                          : v.url || ''}
+                      </span>
                     </li>
                   ))}
                 </ul>

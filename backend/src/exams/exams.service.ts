@@ -25,6 +25,7 @@ const CONCERNING_TYPES = [
   'COPY',
   'PASTE',
   'CUT',
+  'LONG_DISCONNECT', // a significant disconnect gap
 ];
 
 // Ownership is enforced through the chain Exam -> Course -> Teacher: every query
