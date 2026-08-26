@@ -44,10 +44,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    # Bind to the VM's loopback only. The tunnel (next step) reaches it here;
-    # the internet cannot. For a quick local test on the VM: curl 127.0.0.1:3000/health
+    # Host bind address for port 3000. Default 127.0.0.1 (VM: only the tunnel
+    # reaches it; the internet cannot). For LAN testing on a laptop, put
+    # BIND_ADDR=0.0.0.0 in docker/.env so other devices on the same WiFi can
+    # reach http://<laptop-ip>:3000.
     ports:
-      - "127.0.0.1:3000:3000"
+      - "${BIND_ADDR:-127.0.0.1}:3000:3000"
 
   # Cloudflare Tunnel — public HTTPS with no open ports on the VM. Enabled only
   # with the "tunnel" profile:  docker compose --profile tunnel up -d
@@ -63,5 +65,27 @@ services:
     depends_on:
       - backend
 
+  # Caddy — direct HTTPS on the VM (Option C: bypass Cloudflare). Enabled with
+  # the "direct" profile:  docker compose --profile direct up -d --build
+  # Requires ports 80+443 open (Oracle Security List + instance iptables) and the
+  # domain's DNS pointing straight at this VM (DNS-only). Do NOT run it together
+  # with the "tunnel" profile — pick one.
+  caddy:
+    profiles: ["direct"]
+    image: caddy:2-alpine
+    container_name: proctor-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+
 volumes:
   postgres_data:
+  caddy_data:
+  caddy_config:
