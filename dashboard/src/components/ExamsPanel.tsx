@@ -4,9 +4,19 @@ import { JoinCode, SearchBar } from '../ui';
 
 const STATUS_STYLES: Record<string, string> = {
   OPEN: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
+  SCHEDULED: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
   CLOSED: 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
   DRAFT: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300',
 };
+
+// An OPEN exam whose start time is still in the future shows as SCHEDULED —
+// students can't join until it starts.
+function effectiveStatus(e: any): string {
+  if (e.status === 'OPEN' && e.startsAt && new Date(e.startsAt) > new Date()) {
+    return 'SCHEDULED';
+  }
+  return e.status;
+}
 
 const input =
   'px-3 py-2 rounded-lg text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500';
@@ -111,7 +121,7 @@ export function ExamsPanel({ course, onOpen }: { course: any; onOpen: (exam: any
                   <button className="text-gray-900 dark:text-gray-100 hover:text-blue-600 dark:hover:text-blue-400" onClick={() => onOpen(e)}>
                     {e.title}
                   </button>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_STYLES[e.status] || ''}`}>{e.status}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_STYLES[effectiveStatus(e)] || ''}`}>{effectiveStatus(e)}</span>
                 </div>
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-xs text-gray-500 dark:text-gray-400">Join code</span>

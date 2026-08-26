@@ -130,16 +130,20 @@ export class ExamsService {
     });
     if (!exam) throw new NotFoundException(`No exam for code ${joinCode}`);
 
-    // Refuse if not open, or if its end time has passed (auto-close it then).
-    const timedOut = !!exam.endsAt && exam.endsAt < new Date();
-    if (exam.status !== 'OPEN' || timedOut) {
+    // Enforce the exam window: refuse before it starts, after it ends, or if it
+    // isn't OPEN. Auto-close it if its end time has passed.
+    const now = new Date();
+    const notStarted = !!exam.startsAt && now < exam.startsAt;
+    const timedOut = !!exam.endsAt && exam.endsAt < now;
+    if (exam.status !== 'OPEN' || notStarted || timedOut) {
       if (exam.status === 'OPEN' && timedOut) {
         await this.prisma.exam.update({
           where: { id: exam.id },
           data: { status: 'CLOSED' },
         });
       }
-      throw new ConflictException(`Exam "${exam.title}" is not open for registration`);
+      const reason = notStarted ? 'has not started yet' : 'is not open for registration';
+      throw new ConflictException(`Exam "${exam.title}" ${reason}`);
     }
 
     const session = await this.prisma.studentSession.create({
@@ -175,8 +179,13 @@ export class ExamsService {
       where: {
         status: 'OPEN',
         OR: [
+          // its end time has passed
           { endsAt: { lt: now } },
-          { endsAt: null, createdAt: { lt: safeguardCutoff } },
+          // no end time, no scheduled start, created > safeguard window ago
+          { endsAt: null, startsAt: null, createdAt: { lt: safeguardCutoff } },
+          // no end time, started > safeguard window ago (future-scheduled exams
+          // are left alone until they actually start)
+          { endsAt: null, startsAt: { lt: safeguardCutoff } },
         ],
       },
       data: { status: 'CLOSED' },
