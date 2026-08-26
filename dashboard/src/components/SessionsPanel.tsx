@@ -195,7 +195,7 @@ export function SessionsPanel({ exam }: { exam: any }) {
                 <ul className="text-xs divide-y divide-gray-100 dark:divide-gray-700">
                   {violations.map((v) => (
                     <li key={v.id} className="py-1.5 flex items-center gap-2">
-                      <span className={`font-mono font-semibold px-2 py-0.5 rounded w-32 shrink-0 text-center ${violationClasses(v.type)}`}>
+                      <span className={`font-mono font-semibold px-2 py-0.5 rounded w-32 shrink-0 text-center ${violationClasses(v.type, v.concerning)}`}>
                         {v.type}
                       </span>
                       <span className="text-gray-400 dark:text-gray-500 w-20 shrink-0">

@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { concerningIds } from '../common/concerning';
 
 // The extension heartbeats every 30s. An ACTIVE session with no beat for this
 // long is marked DISCONNECTED (heartbeats stopped — network drop / sleep /
@@ -59,9 +60,14 @@ export class SessionsService {
       where: { sessionId },
       orderBy: { occurredAt: 'asc' },
     });
+    // Annotate each row with whether it actually counts as a warning, using the
+    // same classifier as the count, so the dashboard can grey out benign
+    // exam/login activity instead of showing it all in red.
+    const concerning = concerningIds(violations);
     return violations.map((v) => ({
       ...v,
       payload: v.payload ? JSON.parse(v.payload) : null,
+      concerning: concerning.has(v.id),
     }));
   }
 

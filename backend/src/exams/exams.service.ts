@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
-import { CONCERNING_TYPES } from '../common/violation-types';
+import { concerningIds } from '../common/concerning';
 
 // Join-code alphabet: no 0/O/1/I/L to avoid students mistyping the code.
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -101,17 +101,28 @@ export class ExamsService {
       orderBy: { startedAt: 'asc' },
       include: { _count: { select: { violations: true } } },
     });
-    // Concerning-only counts per session, for the warning thresholds.
+    // Concerning-only counts per session, for the warning thresholds. We pull
+    // the events (in time order) and run them through the classifier, which
+    // filters out benign exam/login activity — see common/concerning.ts. This
+    // is a read-time computation, so the raw log is never altered.
     const ids = sessions.map((s) => s.id);
-    const grouped = ids.length
-      ? await this.prisma.violation.groupBy({
-          by: ['sessionId'],
-          where: { sessionId: { in: ids }, type: { in: CONCERNING_TYPES } },
-          _count: { _all: true },
+    const events = ids.length
+      ? await this.prisma.violation.findMany({
+          where: { sessionId: { in: ids } },
+          select: { id: true, sessionId: true, type: true, url: true, occurredAt: true },
+          orderBy: { occurredAt: 'asc' },
         })
       : [];
-    const concerning = new Map(grouped.map((g) => [g.sessionId, g._count._all]));
-    return sessions.map((s) => ({ ...s, concerningCount: concerning.get(s.id) ?? 0 }));
+    const bySession = new Map<string, typeof events>();
+    for (const e of events) {
+      const list = bySession.get(e.sessionId);
+      if (list) list.push(e);
+      else bySession.set(e.sessionId, [e]);
+    }
+    return sessions.map((s) => ({
+      ...s,
+      concerningCount: concerningIds(bySession.get(s.id) ?? []).size,
+    }));
   }
 
   async setStatus(teacherId: string, id: string, status: string) {

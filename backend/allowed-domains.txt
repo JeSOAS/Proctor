@@ -1,0 +1,40 @@
+# Proctor — allowed (whitelisted) domains
+# ---------------------------------------------------------------------------
+# Activity that happens ON one of these domains is NOT counted as a violation.
+# This exists because taking an online exam legitimately touches several sites:
+# logging in bounces through Google's auth pages, the form itself lives on
+# Google, static assets load from Google's CDNs, etc. Without this list, simply
+# signing in racks up a dozen "TAB_NAVIGATE" and "PASTE" warnings before the
+# exam even begins.
+#
+# It filters navigations, tab switches, new tabs, and clipboard events. It does
+# NOT hide those events from the log — they're still recorded — it only stops
+# them counting toward a student's warning total. A student copying from an
+# outside site (e.g. an AI chat) is still flagged, because the COPY happens on a
+# domain that ISN'T listed here.
+#
+# HOW MATCHING WORKS
+#   - One domain per line. Blank lines and lines starting with # are ignored.
+#   - Matching is by suffix: an entry matches that exact host AND any subdomain.
+#     e.g. "google.com" would match "accounts.google.com" and "mail.google.com".
+#     We list specific subdomains below rather than bare "google.com" so that,
+#     say, Gmail is NOT silently whitelisted. Loosen or tighten as you need.
+#   - Edit this file and restart the backend to apply (it's read once at startup).
+#
+# ---------------------------------------------------------------------------
+
+# --- Google Forms (the exam) + Google sign-in ---
+accounts.google.com          # the login / redirect chain
+docs.google.com              # Google Forms are served from docs.google.com/forms
+forms.gle                    # short form links
+www.google.com               # auth sometimes bounces through here
+gstatic.com                  # Google static assets (fonts, scripts, images)
+fonts.googleapis.com         # Google Fonts stylesheets
+googleusercontent.com        # user content / avatars / uploaded images
+
+# --- Add your own below ---
+# Add the exam platform and its login provider if you don't use Google Forms.
+# Examples (uncomment and edit):
+# forms.office.com           # Microsoft Forms
+# login.microsoftonline.com  # Microsoft sign-in
+# your-lms.example.edu       # your institution's LMS

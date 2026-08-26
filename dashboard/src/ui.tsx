@@ -102,8 +102,11 @@ export function isConcerning(type: string) {
   return CONCERNING.has(type);
 }
 
-export function violationClasses(type: string) {
-  return isConcerning(type)
+// `concerning` comes from the backend (URL/duration-aware). When provided it
+// wins; otherwise we fall back to the coarse type-only check.
+export function violationClasses(type: string, concerning?: boolean) {
+  const flagged = concerning ?? isConcerning(type);
+  return flagged
     ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
     : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300';
 }
