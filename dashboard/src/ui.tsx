@@ -1,5 +1,15 @@
 import { useState } from 'react';
 
+// Shared button styles — filled/tinted so actions clearly stand out.
+export const btn = {
+  primary: 'px-3 py-1.5 rounded-md text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700',
+  neutral:
+    'px-3 py-1.5 rounded-md text-sm font-semibold bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600',
+  danger:
+    'px-3 py-1.5 rounded-md text-sm font-semibold bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/50 dark:text-red-200 dark:hover:bg-red-900/70',
+  success: 'px-3 py-1.5 rounded-md text-sm font-semibold bg-green-600 text-white hover:bg-green-700',
+};
+
 export function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   async function copy() {
@@ -15,9 +25,9 @@ export function CopyButton({ text, label = 'Copy' }: { text: string; label?: str
     <button
       type="button"
       onClick={copy}
-      className="text-xs px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+      className="text-xs font-semibold px-2.5 py-1 rounded-md bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-200 dark:hover:bg-blue-900/70"
     >
-      {copied ? 'Copied!' : label}
+      {copied ? '✓ Copied' : label}
     </button>
   );
 }

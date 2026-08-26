@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { api } from '../api';
-import { HelpIcon, JoinCode, SearchBar } from '../ui';
+import { HelpIcon, JoinCode, SearchBar, btn } from '../ui';
+import { ExamSettings } from './ExamSettings';
 
 const STATUS_STYLES: Record<string, string> = {
   OPEN: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
@@ -142,34 +143,25 @@ export function ExamsPanel({ course, onOpen }: { course: any; onOpen: (exam: any
                 </div>
               </div>
               <div className="flex flex-col items-end gap-2 shrink-0">
-                <button
-                  onClick={() => onOpen(e)}
-                  className="text-xs font-medium px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 w-24 text-center"
-                >
+                <button onClick={() => onOpen(e)} className={`${btn.primary} w-24 text-center`}>
                   Monitor →
                 </button>
                 {e.status === 'CLOSED' ? (
-                  <button
-                    onClick={() => changeStatus(e.id, 'OPEN')}
-                    className="text-xs font-medium px-3 py-1.5 rounded-md border border-green-300 dark:border-green-800 text-green-700 dark:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/30 w-24 text-center"
-                  >
+                  <button onClick={() => changeStatus(e.id, 'OPEN')} className={`${btn.success} w-24 text-center`}>
                     Reopen
                   </button>
                 ) : (
-                  <button
-                    onClick={() => changeStatus(e.id, 'CLOSED')}
-                    className="text-xs font-medium px-3 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 w-24 text-center"
-                  >
+                  <button onClick={() => changeStatus(e.id, 'CLOSED')} className={`${btn.neutral} w-24 text-center`}>
                     Close
                   </button>
                 )}
-                <button
-                  onClick={() => remove(e.id)}
-                  className="text-xs font-medium px-3 py-1.5 rounded-md border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 w-24 text-center"
-                >
+                <button onClick={() => remove(e.id)} className={`${btn.danger} w-24 text-center`}>
                   Delete
                 </button>
               </div>
+            </div>
+            <div className="mt-3">
+              <ExamSettings exam={e} onSaved={() => load()} />
             </div>
           </div>
         ))}

@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { api } from '../api';
-import { SearchBar } from '../ui';
+import { SearchBar, btn } from '../ui';
 
 const input =
   'px-3 py-2 rounded-lg text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500';
@@ -94,16 +94,10 @@ export function CoursesPanel({ onOpen }: { onOpen: (course: any) => void }) {
                 <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{c.section || '—'}</td>
                 <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{c._count?.exams ?? 0}</td>
                 <td className="px-4 py-3 text-right whitespace-nowrap">
-                  <button
-                    onClick={() => onOpen(c)}
-                    className="text-xs font-medium px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700 mr-2"
-                  >
+                  <button onClick={() => onOpen(c)} className={`${btn.primary} mr-2`}>
                     Open →
                   </button>
-                  <button
-                    onClick={() => remove(c.id)}
-                    className="text-xs font-medium px-3 py-1.5 rounded-md border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30"
-                  >
+                  <button onClick={() => remove(c.id)} className={btn.danger}>
                     Delete
                   </button>
                 </td>
