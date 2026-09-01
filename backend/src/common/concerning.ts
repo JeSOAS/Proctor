@@ -1,4 +1,4 @@
-import { hostInList, isAllowedHost, isAiHost } from './allowed-domains';
+import { DomainRule, isAiHost, isAllowedUrl, ruleMatches } from './allowed-domains';
 
 // A bare window blur (student left the whole Chrome window, no navigation)
 // counts as a warning only if they stayed away at least this long. Shorter
@@ -51,14 +51,36 @@ export function hostOf(value: string | null | undefined): string | undefined {
   }
 }
 
-function parse(url: string | null): { host?: string; hostPath?: string; scheme?: string } {
+function parse(url: string | null): {
+  host?: string;
+  pathname?: string;
+  hostPath?: string;
+  scheme?: string;
+} {
   if (!url) return {};
   try {
     const u = new URL(url);
-    return { host: u.host, hostPath: u.host + u.pathname, scheme: u.protocol };
+    return { host: u.host, pathname: u.pathname, hostPath: u.host + u.pathname, scheme: u.protocol };
   } catch {
     return {};
   }
+}
+
+// Scope the exam link to host + its first path segment, so setting the exam link
+// to a Google Form (docs.google.com/forms/...) whitelists /forms — NOT all of
+// docs.google.com (which would re-open the saved-Doc loophole).
+function examLinkRule(examLink: string | null | undefined): DomainRule | null {
+  const host = hostOf(examLink);
+  if (!host) return null;
+  let firstSeg = '';
+  try {
+    const raw = examLink!.trim();
+    const u = new URL(raw.startsWith('http') ? raw : 'https://' + raw);
+    firstSeg = u.pathname.split('/')[1] || '';
+  } catch {
+    /* bare domain — no path scope */
+  }
+  return firstSeg ? { host, path: '/' + firstSeg } : { host };
 }
 
 /**
@@ -76,7 +98,7 @@ export function classify(
   events: ClassifiableEvent[],
   opts: { examLink?: string | null } = {},
 ): ClassifyResult {
-  const examHost = hostOf(opts.examLink);
+  const examRule = examLinkRule(opts.examLink);
   const concerning = new Set<number>();
   const postSubmission = new Set<number>();
   let aiUsed = false;
@@ -94,18 +116,19 @@ export function classify(
   // OR a blank/unknown target (no URL). Returns true when the target is benign.
   const isAllowedTarget = (url: string | null): boolean => {
     if (!url) return true; // blank new tab / unknown — not evidence
-    const { host, scheme } = parse(url);
+    const { host, pathname, scheme } = parse(url);
     if (scheme && ALLOWED_SCHEMES.has(scheme)) return true;
-    if (examHost && host && (host === examHost || host.endsWith('.' + examHost))) return true;
-    return isAllowedHost(host);
+    if (examRule && ruleMatches(examRule, host, pathname || '/')) return true;
+    return isAllowedUrl(host, pathname || '/');
   };
 
   const noteVisit = (url: string | null) => {
     if (!url) return;
-    const { host } = parse(url);
+    const { host, pathname } = parse(url);
     // AI detection is independent of whether an exam link is configured.
     if (isAiHost(host)) aiUsed = true;
-    if (examHost && host && (host === examHost || host.endsWith('.' + examHost))) visitedExamLink = true;
+    // Visiting the exam link (path-scoped) counts as opening the exam.
+    if (examRule && ruleMatches(examRule, host, pathname || '/')) visitedExamLink = true;
   };
 
   for (const ev of events) {

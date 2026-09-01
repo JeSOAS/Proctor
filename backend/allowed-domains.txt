@@ -1,53 +1,31 @@
 # Proctor — allowed (whitelisted) domains
 # ---------------------------------------------------------------------------
-# Activity that happens ON one of these domains is NOT counted as a violation.
-# This exists because taking an online exam legitimately touches several sites:
-# logging in bounces through Google's auth pages, the form itself lives on
-# Google, static assets load from Google's CDNs, etc. Without this list, simply
-# signing in racks up a dozen "TAB_NAVIGATE" and "PASTE" warnings before the
-# exam even begins.
+# Activity on these is NOT counted as a violation. Keep this list AS SMALL AS
+# POSSIBLE. Students are told not to switch tabs at all during the exam; this
+# list exists only so the unavoidable, automatic navigation of taking the exam
+# (logging in, the exam form itself, a page that opens by itself) doesn't
+# produce false violations. It is NOT a list of "things students may do."
 #
-# It filters navigations, tab switches, new tabs, and clipboard events. It does
-# NOT hide those events from the log — they're still recorded — it only stops
-# them counting toward a student's warning total. A student copying from an
-# outside site (e.g. an AI chat) is still flagged, because the COPY happens on a
-# domain that ISN'T listed here.
+# MATCHING
+#   - "host"          matches that host and any subdomain, ANY path.
+#   - "host/path"     matches only that path (and children). Use this to allow
+#                     one part of a shared host without opening the rest —
+#                     e.g. "docs.google.com/forms" allows Google Forms but NOT
+#                     Google Docs/Sheets/Slides on the same host.
+#   - Browser-internal pages (chrome://, about:, chrome-extension://, …) are
+#     always allowed in code — don't list them.
+#   - The exam's own link (set per exam) is auto-whitelisted, scoped to its path.
+#   - Lines starting with # are comments. Edit + restart the backend to apply.
 #
-# HOW MATCHING WORKS
-#   - One domain per line. Blank lines and lines starting with # are ignored.
-#   - Matching is by suffix: an entry matches that exact host AND any subdomain.
-#     e.g. "google.com" would match "accounts.google.com" and "mail.google.com".
-#     We list specific subdomains below rather than bare "google.com" so that,
-#     say, Gmail is NOT silently whitelisted. Loosen or tighten as you need.
-#   - Edit this file and restart the backend to apply (it's read once at startup).
-#
+# WHY IT'S THIS SHORT (from analysing the live test logs):
+#   - "docs.google.com" (whole host) let a student open a saved Google Doc to
+#     read answers → scoped to /forms only.
+#   - "www.google.com" was 100% /search (looking up answers) → removed.
+#   - teams / sharepoint / azure / office / au.edu were students in other
+#     services mid-exam, not login → removed. If a future exam legitimately
+#     needs one, add it here (path-scoped) or set it as the exam link.
 # ---------------------------------------------------------------------------
 
-# NOTE: browser-internal pages (chrome://, about:, chrome-extension://, edge://,
-# devtools://) are ALWAYS treated as allowed in code — you don't list them here.
-#
-# --- Google Forms (the exam) + Google sign-in ---
-accounts.google.com          # the login / redirect chain
-docs.google.com              # Google Forms are served from docs.google.com/forms
-forms.gle                    # short form links
-www.google.com               # auth sometimes bounces through here
-gstatic.com                  # Google static assets (fonts, scripts, images)
-fonts.googleapis.com         # Google Fonts stylesheets
-googleusercontent.com        # user content / avatars / uploaded images
-
-# --- Microsoft 365 / Teams / SharePoint (used at AU) ---
-teams.microsoft.com          # Microsoft Teams
-login.microsoftonline.com    # Microsoft sign-in
-sharepoint.com               # SharePoint (e.g. assumptionuniversity-my.sharepoint.com)
-office.com                   # Microsoft 365 portal
-
-# --- Assumption University ---
-au.edu                       # AU sites incl. home.au.edu
-
-# --- Add your own below ---
-# The exam's own link (set per-exam on the dashboard) is auto-whitelisted, so it
-# doesn't need to be here. Add anything else students legitimately use.
-# Examples (uncomment and edit):
-# forms.office.com           # Microsoft Forms
-# judge.u-aizu.ac.jp         # an online judge, if it's a coding exam
-# your-lms.example.edu       # your institution's LMS
+accounts.google.com          # Google sign-in / the login redirect chain
+docs.google.com/forms        # Google Forms ONLY — not Docs, Sheets, or Slides
+forms.gle                    # short links that redirect to a Google Form
