@@ -59,10 +59,14 @@ async function join() {
         examId: data.examId,
         examTitle: data.examTitle,
         maxWarnings: data.maxWarnings,
+        // The required exam page; the worker uses it to detect exam start.
+        examLink: data.examLink || null,
         studentName,
         joinedAt: Date.now(),
       },
     });
+    // Fresh join → the "exam opened" marker hasn't fired yet this session.
+    await chrome.storage.local.remove('examStartedReported');
     // Wake the worker so monitoring + heartbeat start right away
     chrome.runtime.sendMessage({ type: '__proctor_enrolled' }).catch(() => {});
     await render();

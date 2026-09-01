@@ -23,6 +23,9 @@
 #
 # ---------------------------------------------------------------------------
 
+# NOTE: browser-internal pages (chrome://, about:, chrome-extension://, edge://,
+# devtools://) are ALWAYS treated as allowed in code — you don't list them here.
+#
 # --- Google Forms (the exam) + Google sign-in ---
 accounts.google.com          # the login / redirect chain
 docs.google.com              # Google Forms are served from docs.google.com/forms
@@ -32,9 +35,19 @@ gstatic.com                  # Google static assets (fonts, scripts, images)
 fonts.googleapis.com         # Google Fonts stylesheets
 googleusercontent.com        # user content / avatars / uploaded images
 
+# --- Microsoft 365 / Teams / SharePoint (used at AU) ---
+teams.microsoft.com          # Microsoft Teams
+login.microsoftonline.com    # Microsoft sign-in
+sharepoint.com               # SharePoint (e.g. assumptionuniversity-my.sharepoint.com)
+office.com                   # Microsoft 365 portal
+
+# --- Assumption University ---
+au.edu                       # AU sites incl. home.au.edu
+
 # --- Add your own below ---
-# Add the exam platform and its login provider if you don't use Google Forms.
+# The exam's own link (set per-exam on the dashboard) is auto-whitelisted, so it
+# doesn't need to be here. Add anything else students legitimately use.
 # Examples (uncomment and edit):
 # forms.office.com           # Microsoft Forms
-# login.microsoftonline.com  # Microsoft sign-in
+# judge.u-aizu.ac.jp         # an online judge, if it's a coding exam
 # your-lms.example.edu       # your institution's LMS

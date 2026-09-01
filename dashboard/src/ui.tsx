@@ -112,8 +112,9 @@ export function violationClasses(type: string, concerning?: boolean) {
 }
 
 /// Tiered warning: none (0) · orange (below max) · red (at max) · red + text (over).
-export function WarningBadge({ count, max }: { count: number; max: number }) {
-  if (count <= 0) return null;
+/// `aiUsed` adds a loud "AI used" flag regardless of the count.
+export function WarningBadge({ count, max, aiUsed }: { count: number; max: number; aiUsed?: boolean }) {
+  if (count <= 0 && !aiUsed) return null;
   const atLimit = count >= max;
   const over = count > max;
   const cls = atLimit
@@ -121,16 +122,84 @@ export function WarningBadge({ count, max }: { count: number; max: number }) {
     : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
   return (
     <span className="inline-flex items-center gap-2">
-      <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${cls}`}>
-        ⚠ {count}/{max}
-      </span>
+      {count > 0 && (
+        <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${cls}`}>
+          ⚠ {count}/{max}
+        </span>
+      )}
       {over && (
         <span className="text-xs font-semibold text-red-600 dark:text-red-400">
           Very high chance of cheating
         </span>
       )}
+      {aiUsed && (
+        <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-200">
+          🤖 AI used
+        </span>
+      )}
     </span>
   );
+}
+
+/// Flag for a session that never visited the exam's required link (extension
+/// off too soon, or the student never actually opened the exam).
+export function NoExamBadge({ show }: { show?: boolean }) {
+  if (!show) return null;
+  return (
+    <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300">
+      ⚠ Did not open exam
+    </span>
+  );
+}
+
+/// Timing flags: opened the exam late, or submitted before the scheduled end.
+export function TimingBadges({ late, early }: { late?: boolean; early?: boolean }) {
+  if (!late && !early) return null;
+  const pill = 'inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full';
+  return (
+    <>
+      {late && <span className={`${pill} bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300`}>⏱ Started late</span>}
+      {early && <span className={`${pill} bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300`}>✔ Finished early</span>}
+    </>
+  );
+}
+
+// Plain-English labels for the raw event types — teachers shouldn't need to
+// know what "WINDOW_BLUR" means.
+const EVENT_LABELS: Record<string, string> = {
+  TAB_NAVIGATE: 'Opened a page',
+  TAB_SWITCH: 'Switched browser tab',
+  TAB_CREATED: 'Opened a new tab',
+  TAB_CLOSED: 'Closed a tab',
+  WINDOW_BLUR: 'Left the Chrome window',
+  WINDOW_FOCUS: 'Returned to Chrome',
+  COPY: 'Copied text',
+  CUT: 'Cut text',
+  PASTE: 'Pasted from clipboard',
+  LONG_DISCONNECT: 'Disconnected for a while',
+  RECONNECT: 'Reconnected',
+  EXAM_STARTED: 'Opened the exam',
+  EXAM_SUBMITTED: 'Submitted the exam',
+};
+export function eventLabel(type: string): string {
+  return EVENT_LABELS[type] || type;
+}
+
+/// Human-readable reason a session ended, for the log.
+///   LEFT → the student pressed "Leave" (finished); EXAM_CLOSED → the teacher
+///   closed the exam; TIMEOUT → heartbeats stopped (disconnected / closed
+///   browser / extension off) and never resumed.
+export function endedReasonLabel(reason?: string): string {
+  switch (reason) {
+    case 'LEFT':
+      return 'Left the exam';
+    case 'EXAM_CLOSED':
+      return 'Exam ended';
+    case 'TIMEOUT':
+      return 'Disconnected (unexpected)';
+    default:
+      return 'Ended';
+  }
 }
 
 const PILL: Record<string, string> = {

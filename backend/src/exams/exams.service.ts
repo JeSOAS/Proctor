@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
-import { concerningIds } from '../common/concerning';
+import { classify } from '../common/concerning';
 
 // Join-code alphabet: no 0/O/1/I/L to avoid students mistyping the code.
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -15,6 +15,10 @@ const CODE_LENGTH = 6;
 // Safeguard: an OPEN exam with no end time that has been open longer than this
 // is auto-closed, so a forgotten exam can't stay open indefinitely.
 const MAX_EXAM_OPEN_HOURS = 24;
+
+// A student who opens the exam more than this after its scheduled start is
+// flagged "started late" (a small grace absorbs clock skew / a slow first load).
+const LATE_START_GRACE_MS = 60_000;
 
 // Ownership is enforced through the chain Exam -> Course -> Teacher: every query
 // filters by the teacher, so a teacher can only ever touch their own exams.
@@ -33,6 +37,8 @@ export class ExamsService {
       maxWarnings?: number;
       startsAt?: string;
       endsAt?: string;
+      expectedStudents?: number;
+      examLink?: string;
     },
   ) {
     if (!input.title || !input.title.trim()) {
@@ -61,6 +67,8 @@ export class ExamsService {
         courseId: course.id,
         maxWarnings:
           typeof input.maxWarnings === 'number' ? input.maxWarnings : undefined,
+        expectedStudents: this.parseExpected(input.expectedStudents),
+        examLink: input.examLink?.trim() || null,
         startsAt,
         endsAt,
         openedAt: new Date(),
@@ -95,16 +103,17 @@ export class ExamsService {
   }
 
   async listExamSessions(teacherId: string, examId: string) {
-    await this.getExam(teacherId, examId); // ownership check + stale expiry
+    const exam = await this.getExam(teacherId, examId); // ownership check + stale expiry
     const sessions = await this.prisma.studentSession.findMany({
       where: { examId },
       orderBy: { startedAt: 'asc' },
       include: { _count: { select: { violations: true } } },
     });
-    // Concerning-only counts per session, for the warning thresholds. We pull
-    // the events (in time order) and run them through the classifier, which
-    // filters out benign exam/login activity — see common/concerning.ts. This
-    // is a read-time computation, so the raw log is never altered.
+    // Per-session signals, computed at read time from the events (in time
+    // order) — see common/concerning.ts. The raw log is never altered.
+    //   concerningCount — warnings, after filtering benign exam/login activity
+    //   aiUsed          — visited a known AI tool
+    //   didNotOpenExam  — an exam link is set but this session never touched it
     const ids = sessions.map((s) => s.id);
     const events = ids.length
       ? await this.prisma.violation.findMany({
@@ -119,10 +128,25 @@ export class ExamsService {
       if (list) list.push(e);
       else bySession.set(e.sessionId, [e]);
     }
-    return sessions.map((s) => ({
-      ...s,
-      concerningCount: concerningIds(bySession.get(s.id) ?? []).size,
-    }));
+    return sessions.map((s) => {
+      const r = classify(bySession.get(s.id) ?? [], { examLink: exam.examLink });
+      const startedLate =
+        !!exam.startsAt &&
+        !!r.examStartedAt &&
+        r.examStartedAt.getTime() > exam.startsAt.getTime() + LATE_START_GRACE_MS;
+      const finishedEarly =
+        !!exam.endsAt && !!r.submittedAt && r.submittedAt.getTime() < exam.endsAt.getTime();
+      return {
+        ...s,
+        concerningCount: r.concerning.size,
+        aiUsed: r.aiUsed,
+        didNotOpenExam: !!exam.examLink && !r.visitedExamLink,
+        examStartedAt: r.examStartedAt,
+        submittedAt: r.submittedAt,
+        startedLate,
+        finishedEarly,
+      };
+    });
   }
 
   async setStatus(teacherId: string, id: string, status: string) {
@@ -137,7 +161,11 @@ export class ExamsService {
       if (!exam.openedAt) data.openedAt = new Date();
     }
     if (status === 'CLOSED') data.closedAt = new Date();
-    return this.prisma.exam.update({ where: { id }, data });
+    const updated = await this.prisma.exam.update({ where: { id }, data });
+    // Closing an exam ends any still-running sessions, so lingering tabs stop
+    // logging events after the exam is over.
+    if (status === 'CLOSED') await this.endSessionsOfClosedExams();
+    return updated;
   }
 
   async deleteExam(teacherId: string, id: string) {
@@ -155,6 +183,8 @@ export class ExamsService {
       disconnectGraceSec?: number;
       autoClose?: boolean;
       notifyStudent?: boolean;
+      expectedStudents?: number;
+      examLink?: string;
     },
   ) {
     await this.getExam(teacherId, id); // ownership check
@@ -163,11 +193,17 @@ export class ExamsService {
       disconnectGraceSec?: number;
       autoClose?: boolean;
       notifyStudent?: boolean;
+      expectedStudents?: number | null;
+      examLink?: string | null;
     } = {};
     if (typeof input.maxWarnings === 'number') {
       if (input.maxWarnings < 1) throw new BadRequestException('maxWarnings must be at least 1');
       data.maxWarnings = Math.floor(input.maxWarnings);
     }
+    if (input.expectedStudents !== undefined) {
+      data.expectedStudents = this.parseExpected(input.expectedStudents);
+    }
+    if (input.examLink !== undefined) data.examLink = input.examLink?.trim() || null;
     if (typeof input.disconnectGraceSec === 'number') {
       if (input.disconnectGraceSec < 0) {
         throw new BadRequestException('disconnectGraceSec must be >= 0');
@@ -227,6 +263,9 @@ export class ExamsService {
       examTitle: exam.title,
       maxWarnings: exam.maxWarnings,
       notifyStudent: exam.notifyStudent,
+      // The extension uses this to detect exam start (first visit) and to know
+      // the form domain; it's auto-whitelisted server-side too.
+      examLink: exam.examLink,
     };
   }
 
@@ -257,6 +296,25 @@ export class ExamsService {
       },
       data: { status: 'CLOSED', closedAt: now },
     });
+    // Any exam that just auto-closed leaves sessions running — end them too.
+    await this.endSessionsOfClosedExams();
+  }
+
+  /// End (mark ENDED, reason EXAM_CLOSED) every still-running session that
+  /// belongs to a CLOSED exam. Idempotent — only touches non-ENDED sessions —
+  /// so it's cheap to call on read paths and stops lingering tabs from logging.
+  private async endSessionsOfClosedExams() {
+    await this.prisma.studentSession.updateMany({
+      where: { status: { not: 'ENDED' }, exam: { status: 'CLOSED' } },
+      data: { status: 'ENDED', endedReason: 'EXAM_CLOSED', endedAt: new Date() },
+    });
+  }
+
+  private parseExpected(value: number | undefined): number | null {
+    if (value === undefined || value === null) return null;
+    const n = Math.floor(Number(value));
+    if (isNaN(n) || n < 0) throw new BadRequestException('expectedStudents must be >= 0');
+    return n;
   }
 
   private parseDate(value: string | undefined, field: string): Date | null {

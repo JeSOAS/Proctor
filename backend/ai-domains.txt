@@ -1,0 +1,31 @@
+# Proctor — AI-tool domains
+# ---------------------------------------------------------------------------
+# Navigating to any of these during an exam flags the student with an "AI used"
+# badge on the dashboard. (It also counts as a violation, because these aren't
+# on the allowed list either — the badge is just an extra, louder signal.)
+#
+# Same format as allowed-domains.txt: one domain per line, suffix-matched
+# (an entry matches that host and any subdomain), # starts a comment, edit and
+# restart the backend to apply.
+# ---------------------------------------------------------------------------
+
+chatgpt.com
+chat.openai.com
+openai.com
+gemini.google.com
+bard.google.com
+claude.ai
+copilot.microsoft.com
+perplexity.ai
+openrouter.ai
+poe.com
+character.ai
+you.com
+deepseek.com
+x.ai
+grok.com
+meta.ai
+mistral.ai
+blackbox.ai
+phind.com
+huggingface.co

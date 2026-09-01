@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { concerningIds } from '../common/concerning';
+import { classify } from '../common/concerning';
 
 // The extension heartbeats every 30s. An ACTIVE session with no beat for this
 // long is marked DISCONNECTED (heartbeats stopped — network drop / sleep /
@@ -56,18 +56,25 @@ export class SessionsService {
 
   async listViolations(teacherId: string, sessionId: string) {
     await this.ensureOwned(teacherId, sessionId);
-    const violations = await this.prisma.violation.findMany({
-      where: { sessionId },
-      orderBy: { occurredAt: 'asc' },
-    });
-    // Annotate each row with whether it actually counts as a warning, using the
-    // same classifier as the count, so the dashboard can grey out benign
-    // exam/login activity instead of showing it all in red.
-    const concerning = concerningIds(violations);
+    const [violations, session] = await Promise.all([
+      this.prisma.violation.findMany({
+        where: { sessionId },
+        orderBy: { occurredAt: 'asc' },
+      }),
+      this.prisma.studentSession.findUnique({
+        where: { id: sessionId },
+        select: { exam: { select: { examLink: true } } },
+      }),
+    ]);
+    // Annotate each row with whether it counts as a warning and whether it
+    // happened after submission, using the same classifier (and exam link) as
+    // the count — so the dashboard mirrors it exactly.
+    const r = classify(violations, { examLink: session?.exam?.examLink });
     return violations.map((v) => ({
       ...v,
       payload: v.payload ? JSON.parse(v.payload) : null,
-      concerning: concerning.has(v.id),
+      concerning: r.concerning.has(v.id),
+      postSubmission: r.postSubmission.has(v.id),
     }));
   }
 

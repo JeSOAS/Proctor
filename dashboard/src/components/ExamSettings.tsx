@@ -17,6 +17,10 @@ export function ExamSettings({
   const [open, setOpen] = useState(false);
   const [max, setMax] = useState<number>(exam.maxWarnings ?? 3);
   const [graceSec, setGraceSec] = useState<number>(exam.disconnectGraceSec ?? 180);
+  const [expected, setExpected] = useState<string>(
+    typeof exam.expectedStudents === 'number' ? String(exam.expectedStudents) : '',
+  );
+  const [examLink, setExamLink] = useState<string>(exam.examLink ?? '');
   const [notify, setNotify] = useState<boolean>(!!exam.notifyStudent);
   const [autoClose, setAutoClose] = useState<boolean>(!!exam.autoClose);
   const [savedMsg, setSavedMsg] = useState('');
@@ -31,6 +35,8 @@ export function ExamSettings({
         disconnectGraceSec: graceSec,
         notifyStudent: notify,
         autoClose,
+        expectedStudents: expected === '' ? null : Number(expected),
+        examLink: examLink.trim(),
       });
       setSavedMsg('Saved');
       setTimeout(() => setSavedMsg(''), 1500);
@@ -67,7 +73,27 @@ export function ExamSettings({
               </span>
               <input type="number" min={0} value={graceSec} onChange={(e) => setGraceSec(Number(e.target.value))} className={numInput} />
             </label>
+            <label className="inline-flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 text-gray-600 dark:text-gray-300">
+                Expected students
+                <HelpIcon text="Used for the joined / expected counter. Leave blank if you don't want it." />
+              </span>
+              <input type="number" min={0} value={expected} onChange={(e) => setExpected(e.target.value)} placeholder="—" className={numInput} />
+            </label>
           </div>
+
+          <label className="block">
+            <span className="inline-flex items-center gap-1 text-gray-600 dark:text-gray-300">
+              Exam link (required page)
+              <HelpIcon text="The URL students must open for this exam. Auto-whitelisted; students whose session never visits this domain are flagged 'Did not open exam'." />
+            </span>
+            <input
+              value={examLink}
+              onChange={(e) => setExamLink(e.target.value)}
+              placeholder="https://docs.google.com/forms/d/…"
+              className="block w-full mt-1 px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+            />
+          </label>
 
           <div className="flex flex-wrap gap-x-6 gap-y-2">
             <label className="inline-flex items-center gap-2">

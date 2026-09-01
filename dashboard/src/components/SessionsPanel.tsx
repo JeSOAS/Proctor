@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api';
-import { HelpIcon, JoinCode, SearchBar, StatusPill, WarningBadge, btn, violationClasses } from '../ui';
+import {
+  HelpIcon,
+  JoinCode,
+  NoExamBadge,
+  SearchBar,
+  StatusPill,
+  TimingBadges,
+  WarningBadge,
+  btn,
+  endedReasonLabel,
+  eventLabel,
+} from '../ui';
 import { ExamSettings } from './ExamSettings';
 
 const fmt = (d?: string) => (d ? new Date(d).toLocaleString() : null);
@@ -19,6 +30,87 @@ const fmtGap = (sec?: number) => {
   return s ? `${m}m ${s}s` : `${m}m`;
 };
 
+const hostOf = (u?: string) => {
+  if (!u) return '';
+  try {
+    return new URL(u).host;
+  } catch {
+    return u;
+  }
+};
+
+type LogRow = {
+  key: string;
+  label: string;
+  time: string;
+  detail: string;
+  fullUrl?: string;
+  concerning: boolean;
+  postSubmission: boolean;
+  tone: 'exam' | 'plain';
+};
+
+// Turn raw events into readable rows: merge each window blur with the focus that
+// follows it into one "Away from Chrome for X" line, label everything in plain
+// English, and carry the counts/post-submission flags for display.
+function buildLogRows(violations: any[]): LogRow[] {
+  const rows: LogRow[] = [];
+  let pendingBlur: any = null;
+
+  const away = (blur: any, secs?: number) =>
+    rows.push({
+      key: `away-${blur.id}`,
+      label: secs == null ? 'Left Chrome (did not return)' : `Away from Chrome for ${fmtGap(secs)}`,
+      time: new Date(blur.occurredAt).toLocaleTimeString(),
+      detail: hostOf(blur.url),
+      fullUrl: blur.url || undefined,
+      concerning: !!blur.concerning,
+      postSubmission: !!blur.postSubmission,
+      tone: 'plain',
+    });
+
+  const push = (v: any, detail: string, tone: LogRow['tone']) =>
+    rows.push({
+      key: String(v.id),
+      label: eventLabel(v.type),
+      time: new Date(v.occurredAt).toLocaleTimeString(),
+      detail,
+      fullUrl: v.url || undefined,
+      concerning: !!v.concerning,
+      postSubmission: !!v.postSubmission,
+      tone,
+    });
+
+  for (const v of violations) {
+    switch (v.type) {
+      case 'WINDOW_BLUR':
+        pendingBlur = v;
+        break;
+      case 'WINDOW_FOCUS':
+        if (pendingBlur) {
+          const secs = Math.round(
+            (new Date(v.occurredAt).getTime() - new Date(pendingBlur.occurredAt).getTime()) / 1000,
+          );
+          away(pendingBlur, secs);
+          pendingBlur = null;
+        }
+        break;
+      case 'EXAM_STARTED':
+      case 'EXAM_SUBMITTED':
+        push(v, hostOf(v.url), 'exam');
+        break;
+      case 'LONG_DISCONNECT':
+      case 'RECONNECT':
+        push(v, v.payload?.seconds != null ? `offline ${fmtGap(v.payload.seconds)}` : '', 'plain');
+        break;
+      default:
+        push(v, hostOf(v.url), 'plain');
+    }
+  }
+  if (pendingBlur) away(pendingBlur);
+  return rows;
+}
+
 export function SessionsPanel({ exam }: { exam: any }) {
   const [status, setStatus] = useState<string>(exam.status);
   const [sessions, setSessions] = useState<any[]>([]);
@@ -36,6 +128,10 @@ export function SessionsPanel({ exam }: { exam: any }) {
   useEffect(() => {
     expandedRef.current = expanded;
   }, [expanded]);
+
+  // Refs to each student card, so opening one scrolls it into view instead of
+  // leaving the page parked where the previous (possibly long) log was.
+  const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const load = useCallback(async () => {
     try {
@@ -87,6 +183,10 @@ export function SessionsPanel({ exam }: { exam: any }) {
     if (expanded === id) return setExpanded(null);
     setExpanded(id);
     setViolations([]);
+    // Align the page to the student just opened (#4).
+    requestAnimationFrame(() =>
+      rowRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+    );
     try {
       setViolations(await api.sessionViolations(id));
     } catch (e: any) {
@@ -140,10 +240,20 @@ export function SessionsPanel({ exam }: { exam: any }) {
       {/* Exam info */}
       <div className="text-xs text-gray-500 dark:text-gray-400 mb-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-4 py-3 grid gap-1 sm:grid-cols-2">
         <div>Type: <span className="text-gray-700 dark:text-gray-300">{scheduled ? 'Scheduled' : 'Manual'}</span></div>
+        <div>
+          Students: <span className="text-gray-700 dark:text-gray-300">
+            {sessions.length} joined{typeof exam.expectedStudents === 'number' ? ` / ${exam.expectedStudents} expected` : ''}
+          </span>
+        </div>
         <div>Max warnings: <span className="text-gray-700 dark:text-gray-300">{max}</span></div>
         <div>Planned: <span className="text-gray-700 dark:text-gray-300">{range(exam.startsAt, exam.endsAt)}</span></div>
         <div>Actual: <span className="text-gray-700 dark:text-gray-300">{range(exam.openedAt, exam.closedAt)}</span></div>
         <div>Created: <span className="text-gray-700 dark:text-gray-300">{fmt(exam.createdAt) || '—'}</span></div>
+        {exam.examLink && (
+          <div className="sm:col-span-2 truncate">
+            Exam link: <a href={exam.examLink} target="_blank" rel="noreferrer" className="text-blue-600 dark:text-blue-400 hover:underline">{exam.examLink}</a>
+          </div>
+        )}
       </div>
 
       {/* Advanced settings (collapsed by default) */}
@@ -166,19 +276,25 @@ export function SessionsPanel({ exam }: { exam: any }) {
 
       <div className="grid gap-2">
         {filtered.map((s) => (
-          <div key={s.id} className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
+          <div
+            key={s.id}
+            ref={(el) => {
+              rowRefs.current[s.id] = el;
+            }}
+            className="scroll-mt-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg"
+          >
             <div className="px-4 py-3 flex items-center justify-between gap-3">
               <button className="text-left min-w-0" onClick={() => toggleViolations(s.id)}>
                 <div className="font-medium flex flex-wrap items-center gap-2">
                   <StatusPill session={s} examClosed={examClosed} />
                   <span className="text-gray-900 dark:text-gray-100">{s.studentName}</span>
-                  <WarningBadge count={s.concerningCount ?? 0} max={max} />
+                  <WarningBadge count={s.concerningCount ?? 0} max={max} aiUsed={s.aiUsed} />
+                  <NoExamBadge show={s.didNotOpenExam} />
+                  <TimingBadges late={s.startedLate} early={s.finishedEarly} />
                 </div>
                 <div className="text-xs text-gray-500 dark:text-gray-400">
                   {s.studentId || 'no ID'} · joined {time(s.startedAt)}
-                  {s.endedAt && (
-                    <> · {s.endedReason === 'LEFT' ? 'left' : s.endedReason === 'TIMEOUT' ? 'timed out' : 'ended'} {time(s.endedAt)}</>
-                  )}
+                  {s.endedAt && <> · {endedReasonLabel(s.endedReason)} {time(s.endedAt)}</>}
                   {' '}· seen {time(s.lastSeenAt)} · {s._count?.violations ?? 0} event(s)
                 </div>
               </button>
@@ -189,26 +305,58 @@ export function SessionsPanel({ exam }: { exam: any }) {
 
             {expanded === s.id && (
               <div className="border-t border-gray-100 dark:border-gray-700 px-4 py-2 bg-gray-50 dark:bg-gray-900/40">
+                <div className="text-xs py-1 flex items-center gap-2">
+                  <span className="font-mono font-semibold px-2 py-0.5 rounded w-32 shrink-0 text-center bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">
+                    LOGON
+                  </span>
+                  <span className="text-gray-500 dark:text-gray-400">joined at {time(s.startedAt)}</span>
+                </div>
                 {violations.length === 0 && (
                   <p className="text-xs text-gray-400 dark:text-gray-500 py-1">No events recorded.</p>
                 )}
-                <ul className="text-xs divide-y divide-gray-100 dark:divide-gray-700">
-                  {violations.map((v) => (
-                    <li key={v.id} className="py-1.5 flex items-center gap-2">
-                      <span className={`font-mono font-semibold px-2 py-0.5 rounded w-32 shrink-0 text-center ${violationClasses(v.type, v.concerning)}`}>
-                        {v.type}
+                <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+                  {buildLogRows(violations).map((row) => (
+                    <li
+                      key={row.key}
+                      className={`py-1.5 flex items-center gap-2 text-xs ${row.postSubmission ? 'opacity-60' : ''}`}
+                    >
+                      <span className="text-gray-400 dark:text-gray-500 w-20 shrink-0">{row.time}</span>
+                      <span className="min-w-0 flex-1 truncate">
+                        <span className={row.tone === 'exam' ? 'font-semibold text-blue-600 dark:text-blue-300' : 'text-gray-700 dark:text-gray-200'}>
+                          {row.label}
+                        </span>
+                        {row.detail && (
+                          <span className="text-gray-500 dark:text-gray-400" title={row.fullUrl}> — {row.detail}</span>
+                        )}
                       </span>
-                      <span className="text-gray-400 dark:text-gray-500 w-20 shrink-0">
-                        {new Date(v.occurredAt).toLocaleTimeString()}
-                      </span>
-                      <span className="text-gray-500 dark:text-gray-400 truncate">
-                        {v.type === 'RECONNECT' || v.type === 'LONG_DISCONNECT'
-                          ? `offline ${fmtGap(v.payload?.seconds)}`
-                          : v.url || ''}
-                      </span>
+                      {row.postSubmission && (
+                        <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400">
+                          after submit
+                        </span>
+                      )}
+                      {row.tone !== 'exam' &&
+                        (row.concerning ? (
+                          <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">
+                            ⚠ counts
+                          </span>
+                        ) : (
+                          <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-400 dark:bg-gray-700/50 dark:text-gray-500">
+                            info
+                          </span>
+                        ))}
                     </li>
                   ))}
                 </ul>
+                {s.endedAt && (
+                  <div className="text-xs py-1 flex items-center gap-2">
+                    <span className="font-mono font-semibold px-2 py-0.5 rounded w-32 shrink-0 text-center bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                      LOGOFF
+                    </span>
+                    <span className="text-gray-500 dark:text-gray-400">
+                      {endedReasonLabel(s.endedReason)} at {time(s.endedAt)}
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -45,6 +45,8 @@ export const api = {
     maxWarnings: number;
     startsAt?: string;
     endsAt?: string;
+    expectedStudents?: number;
+    examLink?: string;
   }) => req('/exams', { method: 'POST', body: JSON.stringify(input) }),
   setExamStatus: (id: string, status: string) =>
     req(`/exams/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) }),

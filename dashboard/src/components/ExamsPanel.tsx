@@ -28,6 +28,8 @@ export function ExamsPanel({ course, onOpen }: { course: any; onOpen: (exam: any
   const [exams, setExams] = useState<any[]>([]);
   const [title, setTitle] = useState('');
   const [maxWarnings, setMaxWarnings] = useState(3);
+  const [expectedStudents, setExpectedStudents] = useState('');
+  const [examLink, setExamLink] = useState('');
   const [startsAt, setStartsAt] = useState('');
   const [endsAt, setEndsAt] = useState('');
   const [q, setQ] = useState('');
@@ -54,10 +56,14 @@ export function ExamsPanel({ course, onOpen }: { course: any; onOpen: (exam: any
         courseId: course.id,
         title,
         maxWarnings: Number(maxWarnings),
+        expectedStudents: expectedStudents ? Number(expectedStudents) : undefined,
+        examLink: examLink.trim() || undefined,
         startsAt: startsAt || undefined,
         endsAt: endsAt || undefined,
       });
       setTitle('');
+      setExpectedStudents('');
+      setExamLink('');
       setStartsAt('');
       setEndsAt('');
       load();
@@ -98,7 +104,21 @@ export function ExamsPanel({ course, onOpen }: { course: any; onOpen: (exam: any
             Max warnings
             <input type="number" min={0} value={maxWarnings} onChange={(e) => setMaxWarnings(Number(e.target.value))} className={`w-16 ${input}`} />
           </label>
+          <label className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
+            <span className="inline-flex items-center gap-1">
+              Expected students
+              <HelpIcon text="How many students should sit this exam. The dashboard shows joined / expected so you can see who's missing." />
+            </span>
+            <input type="number" min={0} value={expectedStudents} onChange={(e) => setExpectedStudents(e.target.value)} placeholder="—" className={`w-16 ${input}`} />
+          </label>
         </div>
+        <label className="block text-xs text-gray-500 dark:text-gray-400">
+          <span className="inline-flex items-center gap-1">
+            Exam link (required page)
+            <HelpIcon text="The URL students must open for this exam (e.g. the Google Form). It's auto-whitelisted, and any student whose session never visits this domain is flagged 'Did not open exam'." />
+          </span>
+          <input value={examLink} onChange={(e) => setExamLink(e.target.value)} placeholder="https://docs.google.com/forms/d/…" className={`block w-full mt-1 ${input}`} />
+        </label>
         <div className="flex flex-wrap gap-3 items-end">
           <label className="text-xs text-gray-500 dark:text-gray-400">
             Start time (optional)
@@ -137,7 +157,8 @@ export function ExamsPanel({ course, onOpen }: { course: any; onOpen: (exam: any
                   <JoinCode code={e.joinCode} />
                 </div>
                 <div className="text-xs text-gray-500 dark:text-gray-400">
-                  {e._count?.sessions ?? 0} student(s)
+                  {(e._count?.sessions ?? 0)}
+                  {typeof e.expectedStudents === 'number' ? ` / ${e.expectedStudents} expected` : ' student(s)'}
                   {fmt(e.startsAt) && <> · starts {fmt(e.startsAt)}</>}
                   {fmt(e.endsAt) && <> · ends {fmt(e.endsAt)}</>}
                 </div>

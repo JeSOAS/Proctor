@@ -1,11 +1,11 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-// Loads the whitelist of exam/infrastructure domains from allowed-domains.txt
-// (repo root of the backend). Activity on these domains is not counted as a
-// violation — see that file for the rationale and format. The file is the
-// source of truth teachers edit; this array is only a fallback used if the file
-// can't be found, so keep the two roughly in sync.
+// Loads the domain lists from the plain-text files at the backend root
+// (allowed-domains.txt, ai-domains.txt) — those files are the source of truth
+// teachers edit; the DEFAULT_* arrays are only a fallback if a file is missing,
+// so keep them roughly in sync. See each .txt for the rationale and format.
+
 const DEFAULT_ALLOWED = [
   'accounts.google.com',
   'docs.google.com',
@@ -14,35 +14,43 @@ const DEFAULT_ALLOWED = [
   'gstatic.com',
   'fonts.googleapis.com',
   'googleusercontent.com',
+  'teams.microsoft.com',
+  'login.microsoftonline.com',
+  'sharepoint.com',
+  'office.com',
+  'au.edu',
 ];
 
-let cached: string[] | null = null;
+const DEFAULT_AI = [
+  'chatgpt.com',
+  'chat.openai.com',
+  'openai.com',
+  'gemini.google.com',
+  'claude.ai',
+  'copilot.microsoft.com',
+  'perplexity.ai',
+  'openrouter.ai',
+];
 
-/** The list of allowed domain suffixes, loaded once and cached. */
-export function allowedDomains(): string[] {
-  if (cached) return cached;
+function loadList(filename: string, defaults: string[]): string[] {
   // In Docker the backend runs with cwd /app and the file is copied to
-  // /app/allowed-domains.txt; locally it runs from backend/, so cwd works too.
-  // The __dirname candidate (dist/common → app root) is a belt-and-braces
-  // fallback. ALLOWED_DOMAINS_FILE lets an operator point somewhere else.
+  // /app/<filename>; locally it runs from backend/, so cwd works too. The
+  // __dirname candidate (dist/common → app root) is a belt-and-braces fallback.
   const candidates = [
-    process.env.ALLOWED_DOMAINS_FILE,
-    join(process.cwd(), 'allowed-domains.txt'),
-    join(__dirname, '..', '..', 'allowed-domains.txt'),
-  ].filter((p): p is string => !!p);
-
+    join(process.cwd(), filename),
+    join(__dirname, '..', '..', filename),
+  ];
   for (const path of candidates) {
     try {
-      cached = parse(readFileSync(path, 'utf8'));
-      console.log(`[proctor] loaded ${cached.length} allowed domains from ${path}`);
-      return cached;
+      const list = parse(readFileSync(path, 'utf8'));
+      console.log(`[proctor] loaded ${list.length} domains from ${path}`);
+      return list;
     } catch {
       // try the next candidate
     }
   }
-  console.warn('[proctor] allowed-domains.txt not found; using built-in defaults');
-  cached = DEFAULT_ALLOWED;
-  return cached;
+  console.warn(`[proctor] ${filename} not found; using built-in defaults`);
+  return defaults;
 }
 
 function parse(text: string): string[] {
@@ -53,9 +61,28 @@ function parse(text: string): string[] {
     .map((d) => d.replace(/^(\*\.|\.)/, '')); // tolerate "*.x" / ".x"
 }
 
-/** True if `host` is (or is a subdomain of) any allowed domain. */
-export function isAllowedHost(host: string | undefined | null): boolean {
+let allowedCache: string[] | null = null;
+let aiCache: string[] | null = null;
+
+export function allowedDomains(): string[] {
+  return (allowedCache ??= loadList('allowed-domains.txt', DEFAULT_ALLOWED));
+}
+
+export function aiDomains(): string[] {
+  return (aiCache ??= loadList('ai-domains.txt', DEFAULT_AI));
+}
+
+/** True if `host` is (or is a subdomain of) any domain in `list`. */
+export function hostInList(host: string | undefined | null, list: string[]): boolean {
   if (!host) return false;
   const h = host.toLowerCase();
-  return allowedDomains().some((d) => h === d || h.endsWith('.' + d));
+  return list.some((d) => h === d || h.endsWith('.' + d));
+}
+
+export function isAllowedHost(host: string | undefined | null): boolean {
+  return hostInList(host, allowedDomains());
+}
+
+export function isAiHost(host: string | undefined | null): boolean {
+  return hostInList(host, aiDomains());
 }

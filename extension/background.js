@@ -34,8 +34,36 @@ async function getEnrollment() {
 }
 
 async function clearEnrollment() {
-  await chrome.storage.local.remove('enrollment');
+  await chrome.storage.local.remove(['enrollment', 'examStartedReported']);
   console.log('[Proctor/bg] enrollment cleared — monitoring stopped');
+}
+
+// ---------- Exam-start detection ----------
+//
+// The student "starts" the exam when they first open its required page (the
+// exam link, passed at registration). We report EXAM_STARTED once per join so
+// the dashboard can tell join time from actual start time (and flag late starts).
+
+function hostOf(value) {
+  if (!value) return '';
+  try {
+    return new URL(value.startsWith('http') ? value : 'https://' + value).host.toLowerCase();
+  } catch (_) {
+    return '';
+  }
+}
+
+async function maybeReportExamStarted(url) {
+  if (!url) return;
+  const enrollment = await getEnrollment();
+  if (!enrollment || !enrollment.examLink) return;
+  const examHost = hostOf(enrollment.examLink);
+  const h = hostOf(url);
+  if (!examHost || !h || !(h === examHost || h.endsWith('.' + examHost))) return;
+  const { examStartedReported } = await chrome.storage.local.get('examStartedReported');
+  if (examStartedReported) return;
+  await chrome.storage.local.set({ examStartedReported: true });
+  report('EXAM_STARTED', { url });
 }
 
 // ---------- Reporting ----------
@@ -121,6 +149,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (tab.active && changeInfo.url !== from) {
     report('TAB_NAVIGATE', { tabId, url: changeInfo.url, from });
   }
+  maybeReportExamStarted(changeInfo.url);
 });
 
 // ---------- Tab events ----------
@@ -134,12 +163,14 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
   if (url) rememberTabUrl(activeInfo.tabId, url);
   else url = await recallTabUrl(activeInfo.tabId);
   report('TAB_SWITCH', { tabId: activeInfo.tabId, url });
+  maybeReportExamStarted(url);
 });
 
 chrome.tabs.onCreated.addListener((tab) => {
   const url = tab.pendingUrl || tab.url;
   rememberTabUrl(tab.id, url);
   report('TAB_CREATED', { tabId: tab.id, url });
+  maybeReportExamStarted(url);
 });
 
 chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
@@ -149,10 +180,16 @@ chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
 
 // ---------- Window events ----------
 
-chrome.windows.onFocusChanged.addListener((windowId) => {
+chrome.windows.onFocusChanged.addListener(async (windowId) => {
   if (windowId === chrome.windows.WINDOW_ID_NONE) {
-    // User switched to another app — the violation we care about most
-    report('WINDOW_BLUR', {});
+    // User switched to another app — the violation we care about most. Attach
+    // the page they were on so the backend knows the context of the blur.
+    let url;
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      url = tab && (tab.url || tab.pendingUrl);
+    } catch (_) {}
+    report('WINDOW_BLUR', { url });
   } else {
     report('WINDOW_FOCUS', { windowId });
   }

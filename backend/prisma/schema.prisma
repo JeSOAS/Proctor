@@ -59,6 +59,13 @@ model Exam {
   /// Toggle: let the extension warn the student on violations (requires an
   /// extension release to take effect).
   notifyStudent Boolean        @default(false)
+  /// How many students are expected to sit this exam (for the joined/expected
+  /// counter on the dashboard). Optional.
+  expectedStudents Int?
+  /// The URL/domain students are required to visit for this exam (e.g. the
+  /// Google Form link). Auto-whitelisted, and any student whose session never
+  /// touched this domain is flagged "did not open exam". Optional.
+  examLink    String?
   startsAt    DateTime? // scheduled/planned start
   endsAt      DateTime? // if set, the exam auto-closes at this time (the "timer")
   openedAt    DateTime? // when it actually became OPEN (created / reopened)

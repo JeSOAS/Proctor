@@ -40,3 +40,19 @@ document.addEventListener('cut', () => {
   console.log('[Proctor/cs] cut');
   send('CUT');
 });
+
+// ---------- Exam submission (Google Forms) ----------
+//
+// After a successful submit, Google Forms navigates to a ".../formResponse"
+// page and shows "Your response has been recorded." Detecting that page load is
+// a reliable "the student finished" signal. The background worker only records
+// it while the student is enrolled, so it's harmless on any other form.
+
+function detectGoogleFormSubmit() {
+  if (location.hostname === 'docs.google.com' && location.pathname.includes('/formResponse')) {
+    console.log('[Proctor/cs] Google Form submission detected');
+    send('EXAM_SUBMITTED', { url: location.href });
+  }
+}
+
+detectGoogleFormSubmit();
