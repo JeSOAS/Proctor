@@ -185,6 +185,40 @@ export function eventLabel(type: string): string {
   return EVENT_LABELS[type] || type;
 }
 
+// One-line explanation of each event, shown in the log's hover info popup.
+const EVENT_HELP: Record<string, string> = {
+  TAB_NAVIGATE: 'The student opened this page in the exam tab.',
+  TAB_SWITCH: 'The student switched to another browser tab.',
+  TAB_CREATED: 'The student opened a new browser tab.',
+  TAB_CLOSED: 'The student closed a browser tab.',
+  WINDOW_BLUR: 'The student left the Chrome window — e.g. switched to another app or screen.',
+  COPY: 'The student copied text on this page.',
+  CUT: 'The student cut text on this page.',
+  PASTE: 'The student pasted text on this page.',
+  LONG_DISCONNECT: "The student's connection dropped for a while.",
+  RECONNECT: 'The student reconnected after a short drop.',
+  EXAM_STARTED: 'The student opened the exam page.',
+  EXAM_SUBMITTED: 'The student submitted the exam.',
+};
+export function eventHelp(type: string): string {
+  return EVENT_HELP[type] || 'Recorded activity.';
+}
+
+/// A small "i" that reveals an information popup on hover — used to explain
+/// non-counting ("info") log rows without cluttering the row with text.
+export function InfoDot({ text }: { text: string }) {
+  return (
+    <span className="relative inline-flex group shrink-0">
+      <span className="w-4 h-4 inline-flex items-center justify-center rounded-full border border-gray-400 dark:border-gray-500 text-[11px] leading-none font-semibold text-gray-500 dark:text-gray-400 cursor-help">
+        i
+      </span>
+      <span className="pointer-events-none absolute z-20 right-0 top-6 w-56 p-2 text-xs rounded-md shadow-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity">
+        {text}
+      </span>
+    </span>
+  );
+}
+
 /// Human-readable reason a session ended, for the log.
 ///   LEFT → the student pressed "Leave" (finished); EXAM_CLOSED → the teacher
 ///   closed the exam; TIMEOUT → heartbeats stopped (disconnected / closed

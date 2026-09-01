@@ -101,10 +101,11 @@ export function classify(
   };
 
   const noteVisit = (url: string | null) => {
-    if (!examHost || !url) return;
+    if (!url) return;
     const { host } = parse(url);
-    if (host && (host === examHost || host.endsWith('.' + examHost))) visitedExamLink = true;
+    // AI detection is independent of whether an exam link is configured.
     if (isAiHost(host)) aiUsed = true;
+    if (examHost && host && (host === examHost || host.endsWith('.' + examHost))) visitedExamLink = true;
   };
 
   for (const ev of events) {

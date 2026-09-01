@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import {
   HelpIcon,
+  InfoDot,
   JoinCode,
   NoExamBadge,
   SearchBar,
@@ -10,6 +11,7 @@ import {
   WarningBadge,
   btn,
   endedReasonLabel,
+  eventHelp,
   eventLabel,
 } from '../ui';
 import { ExamSettings } from './ExamSettings';
@@ -30,21 +32,12 @@ const fmtGap = (sec?: number) => {
   return s ? `${m}m ${s}s` : `${m}m`;
 };
 
-const hostOf = (u?: string) => {
-  if (!u) return '';
-  try {
-    return new URL(u).host;
-  } catch {
-    return u;
-  }
-};
-
 type LogRow = {
   key: string;
   label: string;
   time: string;
-  detail: string;
-  fullUrl?: string;
+  detail: string; // full URL for tab activity (shown in full, on purpose)
+  help: string;
   concerning: boolean;
   postSubmission: boolean;
   tone: 'exam' | 'plain';
@@ -52,7 +45,7 @@ type LogRow = {
 
 // Turn raw events into readable rows: merge each window blur with the focus that
 // follows it into one "Away from Chrome for X" line, label everything in plain
-// English, and carry the counts/post-submission flags for display.
+// English, keep the full URL for tab activity, and carry the flags for display.
 function buildLogRows(violations: any[]): LogRow[] {
   const rows: LogRow[] = [];
   let pendingBlur: any = null;
@@ -62,8 +55,8 @@ function buildLogRows(violations: any[]): LogRow[] {
       key: `away-${blur.id}`,
       label: secs == null ? 'Left Chrome (did not return)' : `Away from Chrome for ${fmtGap(secs)}`,
       time: new Date(blur.occurredAt).toLocaleTimeString(),
-      detail: hostOf(blur.url),
-      fullUrl: blur.url || undefined,
+      detail: blur.url || '',
+      help: eventHelp('WINDOW_BLUR'),
       concerning: !!blur.concerning,
       postSubmission: !!blur.postSubmission,
       tone: 'plain',
@@ -75,7 +68,7 @@ function buildLogRows(violations: any[]): LogRow[] {
       label: eventLabel(v.type),
       time: new Date(v.occurredAt).toLocaleTimeString(),
       detail,
-      fullUrl: v.url || undefined,
+      help: eventHelp(v.type),
       concerning: !!v.concerning,
       postSubmission: !!v.postSubmission,
       tone,
@@ -97,14 +90,16 @@ function buildLogRows(violations: any[]): LogRow[] {
         break;
       case 'EXAM_STARTED':
       case 'EXAM_SUBMITTED':
-        push(v, hostOf(v.url), 'exam');
+        push(v, v.url || '', 'exam');
         break;
       case 'LONG_DISCONNECT':
       case 'RECONNECT':
         push(v, v.payload?.seconds != null ? `offline ${fmtGap(v.payload.seconds)}` : '', 'plain');
         break;
       default:
-        push(v, hostOf(v.url), 'plain');
+        // Tab activity (navigate/switch/create/close) + clipboard: show the FULL
+        // URL — teachers need to see exactly which page it was.
+        push(v, v.url || '', 'plain');
     }
   }
   if (pendingBlur) away(pendingBlur);
@@ -318,30 +313,40 @@ export function SessionsPanel({ exam }: { exam: any }) {
                   {buildLogRows(violations).map((row) => (
                     <li
                       key={row.key}
-                      className={`py-1.5 flex items-center gap-2 text-xs ${row.postSubmission ? 'opacity-60' : ''}`}
+                      className={`py-2 flex items-start gap-3 text-sm ${row.postSubmission ? 'opacity-60' : ''}`}
                     >
-                      <span className="text-gray-400 dark:text-gray-500 w-20 shrink-0">{row.time}</span>
-                      <span className="min-w-0 flex-1 truncate">
-                        <span className={row.tone === 'exam' ? 'font-semibold text-blue-600 dark:text-blue-300' : 'text-gray-700 dark:text-gray-200'}>
+                      <span className="text-gray-400 dark:text-gray-500 w-20 shrink-0 tabular-nums pt-0.5 text-xs">
+                        {row.time}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className={
+                            row.tone === 'exam'
+                              ? 'font-semibold text-blue-600 dark:text-blue-300'
+                              : row.concerning
+                                ? 'font-medium text-red-700 dark:text-red-300'
+                                : 'text-gray-700 dark:text-gray-200'
+                          }
+                        >
                           {row.label}
                         </span>
                         {row.detail && (
-                          <span className="text-gray-500 dark:text-gray-400" title={row.fullUrl}> — {row.detail}</span>
+                          <span className="text-gray-500 dark:text-gray-400 break-all"> — {row.detail}</span>
                         )}
                       </span>
                       {row.postSubmission && (
-                        <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400">
+                        <span className="shrink-0 mt-0.5 text-xs font-semibold px-1.5 py-0.5 rounded bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400">
                           after submit
                         </span>
                       )}
                       {row.tone !== 'exam' &&
                         (row.concerning ? (
-                          <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">
-                            ⚠ counts
+                          <span className="shrink-0 mt-0.5 text-xs font-semibold px-2 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300">
+                            violation
                           </span>
                         ) : (
-                          <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-400 dark:bg-gray-700/50 dark:text-gray-500">
-                            info
+                          <span className="mt-0.5">
+                            <InfoDot text={row.help} />
                           </span>
                         ))}
                     </li>
