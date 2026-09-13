@@ -71,15 +71,93 @@ async function maybeReportExamStarted(url) {
 // Every event flows through here. If the student has not joined an exam, it is
 // a no-op — the extension is inert until enrollment exists.
 
+function notify(title, message) {
+  try {
+    chrome.notifications.create({
+      type: 'basic',
+      iconUrl: 'icons/icon128.png',
+      title,
+      message,
+      priority: 2,
+    });
+  } catch (_) {
+    /* notifications permission missing or unavailable — ignore */
+  }
+}
+
+// Act on the backend's response to a reported event: optionally warn the
+// student, and stop monitoring if the exam auto-closed on the warning limit.
+async function handleReportResponse(data) {
+  if (!data || typeof data !== 'object') return;
+  if (data.autoClosed) {
+    notify('Exam monitoring ended', 'You reached the warning limit for this exam.');
+    await clearEnrollment();
+    return;
+  }
+  if (data.notifyStudent && data.concerning) {
+    notify(
+      'Proctor warning',
+      `That action was flagged. Warning ${data.concerningCount} of ${data.maxWarnings}.`,
+    );
+  }
+}
+
+// ---------- Offline buffering ----------
+//
+// If the backend is unreachable (flaky wifi / hotspot), events are queued in
+// chrome.storage.local instead of being lost, and flushed on the next
+// successful report or heartbeat. occurredAt is client-side, so ordering holds.
+
+const MAX_BUFFER = 500;
+
+async function enqueue(sessionId, body) {
+  const { eventBuffer = [] } = await chrome.storage.local.get('eventBuffer');
+  eventBuffer.push({ sessionId, body });
+  while (eventBuffer.length > MAX_BUFFER) eventBuffer.shift(); // cap growth
+  await chrome.storage.local.set({ eventBuffer });
+}
+
+let flushing = false;
+async function flushBuffer() {
+  if (flushing) return;
+  flushing = true;
+  try {
+    const base = await apiBase();
+    while (true) {
+      const { eventBuffer = [] } = await chrome.storage.local.get('eventBuffer');
+      if (!eventBuffer.length) break;
+      const item = eventBuffer[0];
+      try {
+        const res = await fetch(`${base}/sessions/${item.sessionId}/violations`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(item.body),
+        });
+        // 404 = that session is gone; drop the event. Other non-OK = still
+        // failing, stop and retry later.
+        if (!res.ok && res.status !== 404) break;
+      } catch (_) {
+        break; // still offline
+      }
+      const cur = (await chrome.storage.local.get('eventBuffer')).eventBuffer || [];
+      cur.shift();
+      await chrome.storage.local.set({ eventBuffer: cur });
+    }
+  } finally {
+    flushing = false;
+  }
+}
+
 async function report(type, payload = {}) {
   const enrollment = await getEnrollment();
   if (!enrollment) return;
+  const body = { type, payload, url: payload.url, occurredAt: new Date().toISOString() };
   try {
     const base = await apiBase();
     const res = await fetch(`${base}/sessions/${enrollment.sessionId}/violations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, payload, url: payload.url, occurredAt: new Date().toISOString() }),
+      body: JSON.stringify(body),
     });
     if (res.status === 404) {
       // Session ended server-side (exam closed, or timed out) — stop monitoring.
@@ -89,8 +167,12 @@ async function report(type, payload = {}) {
     }
     if (!res.ok) throw new Error(`POST violation → ${res.status}`);
     console.log('[Proctor/bg] recorded', type, payload);
+    const data = await res.json().catch(() => ({}));
+    await handleReportResponse(data);
+    flushBuffer(); // connection is up — drain anything buffered during an outage
   } catch (err) {
-    console.warn('[Proctor/bg] could not reach backend, event lost:', type, err.message);
+    console.warn('[Proctor/bg] backend unreachable, buffering event:', type, err.message);
+    await enqueue(enrollment.sessionId, body);
   }
 }
 
@@ -103,6 +185,7 @@ async function sendHeartbeat() {
     const base = await apiBase();
     const res = await fetch(`${base}/sessions/${enrollment.sessionId}/heartbeat`, { method: 'POST' });
     if (res.status === 404) await clearEnrollment();
+    else if (res.ok) flushBuffer(); // connection is up — drain buffered events
   } catch (err) {
     console.warn('[Proctor/bg] heartbeat failed:', err.message);
   }
@@ -176,6 +259,17 @@ chrome.tabs.onCreated.addListener((tab) => {
 chrome.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
   const url = await recallTabUrl(tabId, { remove: true });
   report('TAB_CLOSED', { tabId, url, windowClosing: removeInfo.isWindowClosing });
+});
+
+// A student opening a SEPARATE browser window during the exam (distinct from a
+// new tab). Report where it lands so the backend can judge it.
+chrome.windows.onCreated.addListener(async (win) => {
+  let url;
+  try {
+    const tabs = await chrome.tabs.query({ windowId: win.id });
+    url = tabs[0] && (tabs[0].url || tabs[0].pendingUrl);
+  } catch (_) {}
+  report('NEW_WINDOW', { windowId: win.id, url });
 });
 
 // ---------- Window events ----------

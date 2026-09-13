@@ -90,6 +90,7 @@ function buildLogRows(violations: any[]): LogRow[] {
         break;
       case 'EXAM_STARTED':
       case 'EXAM_SUBMITTED':
+      case 'REJOIN':
         push(v, v.url || '', 'exam');
         break;
       case 'LONG_DISCONNECT':

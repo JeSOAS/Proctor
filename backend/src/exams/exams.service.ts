@@ -248,14 +248,48 @@ export class ExamsService {
       throw new ConflictException(`Exam "${exam.title}" ${reason}`);
     }
 
-    const session = await this.prisma.studentSession.create({
-      data: {
-        examId: exam.id,
-        studentName: input.studentName.trim(),
-        studentId: input.studentId?.trim() || null,
-        userAgent,
-      },
+    // One session per student per exam: if this student already has a session
+    // for this exam, reuse it instead of creating a duplicate row when they
+    // re-join (after a Leave, a timeout, or just re-entering the code). Match on
+    // student ID when given (robust — same person even if they retype the name),
+    // otherwise on name.
+    const studentName = input.studentName.trim();
+    const studentId = input.studentId?.trim() || null;
+    const existing = await this.prisma.studentSession.findFirst({
+      where: studentId
+        ? { examId: exam.id, studentId }
+        : { examId: exam.id, studentName },
+      orderBy: { startedAt: 'desc' },
     });
+
+    let session;
+    if (existing) {
+      const wasEnded = existing.status === 'ENDED';
+      session = await this.prisma.studentSession.update({
+        where: { id: existing.id },
+        data: {
+          status: 'ACTIVE',
+          lastSeenAt: now,
+          disconnectedAt: null,
+          endedAt: null,
+          endedReason: null,
+          studentName,
+          studentId: studentId ?? existing.studentId,
+          userAgent,
+        },
+      });
+      // Record the re-join in the timeline so the reopened session still shows
+      // that the student left and came back.
+      if (wasEnded) {
+        await this.prisma.violation.create({
+          data: { sessionId: existing.id, type: 'REJOIN', occurredAt: now },
+        });
+      }
+    } else {
+      session = await this.prisma.studentSession.create({
+        data: { examId: exam.id, studentName, studentId, userAgent },
+      });
+    }
 
     return {
       sessionId: session.id,

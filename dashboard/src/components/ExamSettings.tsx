@@ -100,14 +100,14 @@ export function ExamSettings({
               <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} className="w-4 h-4 accent-blue-600" />
               <span className="inline-flex items-center gap-1 text-gray-600 dark:text-gray-300">
                 Notify students of violations
-                <HelpIcon text="When on, students are warned on their own screen and shown remaining warnings. Not active yet — needs an extension update." />
+                <HelpIcon text="When on, a student sees a warning on their screen when they trigger a violation, with their remaining warnings. Requires the updated extension." />
               </span>
             </label>
             <label className="inline-flex items-center gap-2">
               <input type="checkbox" checked={autoClose} onChange={(e) => setAutoClose(e.target.checked)} className="w-4 h-4 accent-blue-600" />
               <span className="inline-flex items-center gap-1 text-gray-600 dark:text-gray-300">
                 Auto-close on limit
-                <HelpIcon text="When on, a student's proctoring auto-closes once they hit the max warnings (recorded in the log). Not active yet." />
+                <HelpIcon text="When on, a student's session ends automatically once they reach the max warnings (recorded in the log as 'Reached warning limit')." />
               </span>
             </label>
           </div>
@@ -119,9 +119,6 @@ export function ExamSettings({
               Save settings
             </button>
             {savedMsg && <span className="text-xs text-green-600 dark:text-green-400">{savedMsg}</span>}
-            <span className="text-xs text-gray-400 dark:text-gray-500">
-              The two toggles are stubs — behaviour comes later.
-            </span>
           </div>
         </div>
       )}

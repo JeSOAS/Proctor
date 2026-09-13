@@ -165,10 +165,11 @@ export function classify(
       }
 
       case 'TAB_CREATED':
+      case 'NEW_WINDOW':
         noteVisit(ev.url);
-        // Opening a tab is only concerning if it lands somewhere non-allowed.
-        // A blank/new-tab (no URL / chrome://newtab) is benign — the student's
-        // later navigation, if any, is judged on its own.
+        // Opening a tab/window is only concerning if it lands somewhere
+        // non-allowed. A blank/new one (no URL / chrome://newtab) is benign —
+        // the student's later navigation, if any, is judged on its own.
         if (!isAllowedTarget(ev.url)) flag(ev.id);
         break;
 

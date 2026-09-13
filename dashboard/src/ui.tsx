@@ -171,6 +171,7 @@ const EVENT_LABELS: Record<string, string> = {
   TAB_SWITCH: 'Switched browser tab',
   TAB_CREATED: 'Opened a new tab',
   TAB_CLOSED: 'Closed a tab',
+  NEW_WINDOW: 'Opened a new window',
   WINDOW_BLUR: 'Left the Chrome window',
   WINDOW_FOCUS: 'Returned to Chrome',
   COPY: 'Copied text',
@@ -178,6 +179,7 @@ const EVENT_LABELS: Record<string, string> = {
   PASTE: 'Pasted from clipboard',
   LONG_DISCONNECT: 'Disconnected for a while',
   RECONNECT: 'Reconnected',
+  REJOIN: 'Re-joined the exam',
   EXAM_STARTED: 'Opened the exam',
   EXAM_SUBMITTED: 'Submitted the exam',
 };
@@ -191,12 +193,14 @@ const EVENT_HELP: Record<string, string> = {
   TAB_SWITCH: 'The student switched to another browser tab.',
   TAB_CREATED: 'The student opened a new browser tab.',
   TAB_CLOSED: 'The student closed a browser tab.',
+  NEW_WINDOW: 'The student opened a separate browser window.',
   WINDOW_BLUR: 'The student left the Chrome window — e.g. switched to another app or screen.',
   COPY: 'The student copied text on this page.',
   CUT: 'The student cut text on this page.',
   PASTE: 'The student pasted text on this page.',
   LONG_DISCONNECT: "The student's connection dropped for a while.",
   RECONNECT: 'The student reconnected after a short drop.',
+  REJOIN: 'The student left and re-joined the exam (same session continued).',
   EXAM_STARTED: 'The student opened the exam page.',
   EXAM_SUBMITTED: 'The student submitted the exam.',
 };
@@ -229,6 +233,8 @@ export function endedReasonLabel(reason?: string): string {
       return 'Left the exam';
     case 'EXAM_CLOSED':
       return 'Exam ended';
+    case 'AUTO_CLOSED':
+      return 'Reached warning limit';
     case 'TIMEOUT':
       return 'Disconnected (unexpected)';
     default:

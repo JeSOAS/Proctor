@@ -41,7 +41,7 @@ export class SessionsService {
       throw new BadRequestException('"type" is required');
     }
     await this.touchSession(sessionId);
-    return this.prisma.violation.create({
+    const created = await this.prisma.violation.create({
       data: {
         sessionId,
         type: input.type,
@@ -50,6 +50,49 @@ export class SessionsService {
         occurredAt: input.occurredAt ? new Date(input.occurredAt) : undefined,
       },
     });
+
+    // Re-classify the session so the extension can (optionally) warn the student
+    // and so auto-close can fire when the limit is reached. This is the live
+    // counterpart of the read-time count on the dashboard.
+    const [events, session] = await Promise.all([
+      this.prisma.violation.findMany({
+        where: { sessionId },
+        select: { id: true, type: true, url: true, occurredAt: true },
+        orderBy: { occurredAt: 'asc' },
+      }),
+      this.prisma.studentSession.findUnique({
+        where: { id: sessionId },
+        select: {
+          status: true,
+          exam: {
+            select: { examLink: true, maxWarnings: true, autoClose: true, notifyStudent: true },
+          },
+        },
+      }),
+    ]);
+    const exam = session?.exam;
+    const r = classify(events, { examLink: exam?.examLink });
+    const concerningCount = r.concerning.size;
+    const maxWarnings = exam?.maxWarnings ?? 3;
+
+    // Auto-close: end the session once the student reaches the limit (if enabled).
+    let autoClosed = false;
+    if (exam?.autoClose && session?.status !== 'ENDED' && concerningCount >= maxWarnings) {
+      await this.prisma.studentSession.update({
+        where: { id: sessionId },
+        data: { status: 'ENDED', endedAt: new Date(), endedReason: 'AUTO_CLOSED' },
+      });
+      autoClosed = true;
+    }
+
+    return {
+      id: created.id,
+      concerning: r.concerning.has(created.id), // did THIS event count?
+      concerningCount,
+      maxWarnings,
+      notifyStudent: !!exam?.notifyStudent,
+      autoClosed,
+    };
   }
 
   // ---- Instructor (teacher-scoped via Session -> Exam -> Course -> Teacher) ----
