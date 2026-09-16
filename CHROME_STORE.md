@@ -21,9 +21,11 @@ every permission is justified and the privacy disclosures match the code.
 
 > Proctor monitors a student's browser activity during an online exam they have
 > joined, to support academic integrity. It detects tab switching, window focus
-> loss, page navigation, and clipboard actions (copy/paste/cut) and reports them
-> to the exam server operated by the student's institution. It does not log
-> keystrokes or record what the student types.
+> loss, page navigation, new windows, clipboard actions (copy/paste/cut), and
+> inactivity, and reports them to the exam server operated by the student's
+> institution. During an exam it keeps the exam page in fullscreen and can show
+> the student on-screen warnings. It does not log keystrokes or record what the
+> student types or copies.
 
 ## Permission justifications
 
@@ -33,6 +35,8 @@ every permission is justified and the privacy disclosures match the code.
 | `windows` | Detect when the browser window loses focus (student switching to another application), a key academic-integrity signal. |
 | `storage` | Store the current exam session locally so monitoring continues across the MV3 service worker restarting. |
 | `alarms` | Send a periodic heartbeat so the exam server knows the session is still active and can detect when the student's browser closes. |
+| `notifications` | Warn the student on their own screen when they trigger a monitored action (e.g. "Warning 2 of 3") and tell them if monitoring ends. On-device only; no data leaves the browser. |
+| `idle` | Detect when the student stops interacting with their device during an exam (a possible sign of using another device or being off-screen). Reports only the idle/active/locked state — never any input content. |
 | `host_permissions` (`<all_urls>`) | During an exam the student may navigate to any website; the extension must detect navigation and clipboard actions on whatever page is open to log potential violations. |
 
 > **Reviewer-friendliness vs. coverage:** `<all_urls>` draws the most scrutiny.
@@ -47,7 +51,8 @@ Declare the extension **collects** these, all for **App functionality** only:
 
 - **Personally identifiable information** — name and optional student ID.
 - **Web history** — URLs of tabs the student navigates to during an exam.
-- **User activity** — tab switches, window focus changes, clipboard actions.
+- **User activity** — tab switches, window focus changes, new windows, clipboard
+  actions, fullscreen exits, and inactivity (idle/active state, no input content).
 
 Certify (all true for this code):
 
