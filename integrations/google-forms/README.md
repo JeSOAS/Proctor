@@ -25,13 +25,19 @@ server, when a response is submitted — no heuristics, unspoofable.
 
 1. Build the Google Form as usual. Ensure it **collects email addresses**
    (Settings → Responses) **or** has a **"Student ID"** question.
-2. In the Apps Script editor, run `registerForm('<FORM_ID>')` once — the
-   `<FORM_ID>` is the long id in the form's edit URL
-   (`.../forms/d/<FORM_ID>/edit`). Authorize when prompted. This installs the
-   submit trigger on that form.
-3. On the Proctor dashboard, set that form's URL as the exam's **Exam link**.
+2. Copy the form's id from its **edit** URL: `.../forms/d/`**`<FORM_ID>`**`/edit`,
+   and add it to the `FORM_IDS` list at the top of `Code.gs`, e.g.
+   `const FORM_IDS = ['1AbCd...'];`.
+3. In the Apps Script editor toolbar, choose the function **`setup`** from the
+   dropdown next to **Run**, then click **Run**. Authorize when prompted (first
+   time only). This installs the submit trigger on every form in `FORM_IDS`.
+4. On the Proctor dashboard, set that form's URL as the exam's **Exam link**.
 
-Reusing the same form across sittings needs no repeat — the trigger stays.
+Re-run `setup` whenever you add a form. Reusing an existing form needs no repeat.
+
+> Note: don't run `onFormSubmit` or `registerForm` directly — `onFormSubmit`
+> needs a real submission event, and `registerForm` needs an argument the Run
+> button can't pass. Always run **`setup`**.
 
 ## Verify it works
 

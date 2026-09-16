@@ -13,16 +13,38 @@
  *      "Collect email addresses" ON (AU emails are u<id>@au.edu).
  *
  * PER NEW FORM (~30 seconds, no code changes):
- *   - Run  registerForm('<FORM_ID>')  once for the new form.
- *     The FORM_ID is the long id in the form's edit URL:
- *     https://docs.google.com/forms/d/<FORM_ID>/edit
- *   - Also set that form's URL as the exam's "Exam link" in the dashboard
- *     (that's how the backend matches the form to the exam).
- *   - Authorize the script the first time you run it.
+ *   1. Add the form's id to the FORM_IDS list below. The id is the long part of
+ *      the form's EDIT url:  https://docs.google.com/forms/d/<FORM_ID>/edit
+ *   2. In the editor's toolbar, choose the function "setup" from the dropdown
+ *      (next to Run), then click Run. Authorize when prompted (first time only).
+ *      This installs the submit trigger on every form in FORM_IDS.
+ *   3. On the dashboard, set that form's URL as the exam's "Exam link" (that's
+ *      how the backend matches the form to the exam).
+ *   Re-run "setup" whenever you add another form.
  */
 
 const BACKEND_URL = 'https://proctor.jesoas.org';
 const WEBHOOK_SECRET = 'PASTE_THE_SAME_SECRET_AS_THE_BACKEND';
+
+// The exam form(s) to watch. Put each form's id here (from its edit URL), e.g.
+//   const FORM_IDS = ['1AbCd...xyz', '1EfGh...uvw'];
+const FORM_IDS = [
+  // 'PASTE_A_FORM_ID_HERE',
+];
+
+/**
+ * Run THIS function (pick "setup" in the toolbar dropdown, click Run) to install
+ * the submit trigger on every form in FORM_IDS. Safe to re-run.
+ */
+function setup() {
+  if (!FORM_IDS.length) {
+    throw new Error('Add at least one form id to FORM_IDS at the top, then run setup again.');
+  }
+  FORM_IDS.forEach(function (id) {
+    registerForm(id);
+  });
+  Logger.log('Done — watching ' + FORM_IDS.length + ' form(s).');
+}
 
 /** Fired by the installable trigger on every form submission. */
 function onFormSubmit(e) {
