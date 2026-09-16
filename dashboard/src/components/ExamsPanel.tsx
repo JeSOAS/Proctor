@@ -24,6 +24,10 @@ const input =
 
 const fmt = (d?: string) => (d ? new Date(d).toLocaleString() : null);
 
+// The teacher's local time zone (e.g. "Asia/Bangkok") — shown next to the
+// datetime pickers so it's clear what time zone the schedule is entered in.
+const localZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
 export function ExamsPanel({ course, onOpen }: { course: any; onOpen: (exam: any) => void }) {
   const [exams, setExams] = useState<any[]>([]);
   const [title, setTitle] = useState('');
@@ -58,8 +62,11 @@ export function ExamsPanel({ course, onOpen }: { course: any; onOpen: (exam: any
         maxWarnings: Number(maxWarnings),
         expectedStudents: expectedStudents ? Number(expectedStudents) : undefined,
         examLink: examLink.trim() || undefined,
-        startsAt: startsAt || undefined,
-        endsAt: endsAt || undefined,
+        // datetime-local has no timezone; interpret it as the teacher's LOCAL
+        // time (what the browser does) and send an absolute UTC instant, so the
+        // server's timezone can't shift it.
+        startsAt: startsAt ? new Date(startsAt).toISOString() : undefined,
+        endsAt: endsAt ? new Date(endsAt).toISOString() : undefined,
       });
       setTitle('');
       setExpectedStudents('');
@@ -135,6 +142,11 @@ export function ExamsPanel({ course, onOpen }: { course: any; onOpen: (exam: any
             Create exam
           </button>
         </div>
+        {(startsAt || endsAt) && (
+          <p className="text-xs text-gray-400 dark:text-gray-500">
+            Times are in your local time zone ({localZone}).
+          </p>
+        )}
       </form>
 
       {error && <p className="text-sm text-red-600 dark:text-red-400 mb-3">{error}</p>}

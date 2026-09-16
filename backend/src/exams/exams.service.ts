@@ -76,7 +76,9 @@ export class ExamsService {
         examLink: input.examLink?.trim() || null,
         startsAt,
         endsAt,
-        openedAt: new Date(),
+        // A future-scheduled exam hasn't actually opened yet — its "actual"
+        // open time is set when it truly opens (first student joins, below).
+        openedAt: startsAt && startsAt > new Date() ? null : new Date(),
       },
     });
   }
@@ -257,6 +259,12 @@ export class ExamsService {
       }
       const reason = notStarted ? 'has not started yet' : 'is not open for registration';
       throw new ConflictException(`Exam "${exam.title}" ${reason}`);
+    }
+
+    // First successful join = when the exam actually opened (for scheduled
+    // exams that had no open time yet).
+    if (!exam.openedAt) {
+      await this.prisma.exam.update({ where: { id: exam.id }, data: { openedAt: now } });
     }
 
     // One session per student per exam: if this student already has a session
