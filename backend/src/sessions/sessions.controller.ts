@@ -23,8 +23,8 @@ export class SessionsController {
   // ---- Student-facing (open) ----
 
   @Post(':id/end')
-  end(@Param('id') id: string) {
-    return this.sessionsService.endSession(id);
+  end(@Param('id') id: string, @Body() body: any) {
+    return this.sessionsService.endSession(id, body?.reason);
   }
 
   @Post(':id/heartbeat')

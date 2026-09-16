@@ -306,9 +306,32 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
 // Control messages from the popup start with "__proctor_"; everything else is
 // a monitoring event forwarded by the content script.
 
+// End the exam because the student chose "Finish" in the fullscreen prompt.
+// Distinct end reason so the log tells this apart from the popup Leave button.
+async function finishExam() {
+  const enrollment = await getEnrollment();
+  if (!enrollment) return;
+  try {
+    const base = await apiBase();
+    await fetch(`${base}/sessions/${enrollment.sessionId}/end`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: 'FINISHED_FULLSCREEN' }),
+    });
+  } catch (_) {
+    // even if unreachable, clear locally so the student is released
+  }
+  await clearEnrollment();
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg && msg.type === '__proctor_enrolled') {
     sendHeartbeat(); // begin monitoring immediately, don't wait for the next alarm
+    sendResponse({ ok: true });
+    return false;
+  }
+  if (msg && msg.type === '__proctor_finish') {
+    finishExam();
     sendResponse({ ok: true });
     return false;
   }

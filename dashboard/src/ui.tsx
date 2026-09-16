@@ -253,6 +253,8 @@ export function endedReasonLabel(reason?: string): string {
   switch (reason) {
     case 'LEFT':
       return 'Left the exam';
+    case 'FINISHED_FULLSCREEN':
+      return 'Finished (fullscreen)';
     case 'EXAM_CLOSED':
       return 'Exam ended';
     case 'AUTO_CLOSED':

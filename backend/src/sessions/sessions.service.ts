@@ -19,12 +19,15 @@ export class SessionsService {
 
   // ---- Student-facing (open — called by the extension, no auth) ----
 
-  /// Explicit "Leave exam" from the popup — a deliberate, terminal end.
-  async endSession(id: string) {
+  /// Explicit, deliberate end from the extension. `reason` distinguishes the
+  /// popup "Leave" button (LEFT) from finishing via the fullscreen prompt
+  /// (FINISHED_FULLSCREEN); anything else falls back to LEFT.
+  async endSession(id: string, reason?: string) {
     await this.ensureSessionExists(id);
+    const endedReason = reason === 'FINISHED_FULLSCREEN' ? 'FINISHED_FULLSCREEN' : 'LEFT';
     return this.prisma.studentSession.update({
       where: { id },
-      data: { status: 'ENDED', endedAt: new Date(), endedReason: 'LEFT' },
+      data: { status: 'ENDED', endedAt: new Date(), endedReason },
     });
   }
 

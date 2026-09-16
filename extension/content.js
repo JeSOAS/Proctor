@@ -57,12 +57,15 @@ function detectGoogleFormSubmit() {
 
 detectGoogleFormSubmit();
 
-// ---------- Fullscreen lock ----------
+// ---------- Fullscreen lock + finish prompt ----------
 //
-// While a student is enrolled AND on the exam page, require fullscreen. Show a
-// blocking overlay that they must click to enter fullscreen; if they leave
-// fullscreen, re-show it and report FULLSCREEN_EXIT. Entering fullscreen needs a
-// user gesture, so it's driven by the button click.
+// While a student is enrolled AND on the exam page, require fullscreen. Wanting
+// to LEAVE fullscreen is treated as "I'm done": we intercept Esc (Keyboard Lock)
+// and catch any exit, then show a prompt with two choices —
+//   • Continue in fullscreen  → re-enter and keep working
+//   • Finish & end exam        → end the session (reason FINISHED_FULLSCREEN)
+// Fullscreen can't be made truly inescapable (holding Esc always force-exits),
+// so we also react to fullscreenchange as a backstop and log FULLSCREEN_EXIT.
 
 function hostOf(value) {
   if (!value) return '';
@@ -81,12 +84,9 @@ function onExamPage(examLink) {
 }
 
 let fsOverlay = null;
+let fsActive = true; // enforcement stops once the student finishes
 
-function showFullscreenOverlay() {
-  if (fsOverlay) {
-    fsOverlay.style.display = 'flex';
-    return;
-  }
+function buildOverlay() {
   const o = document.createElement('div');
   o.id = '__proctor_fs_overlay';
   o.setAttribute(
@@ -97,27 +97,72 @@ function showFullscreenOverlay() {
   );
   o.innerHTML =
     '<div style="font-size:26px;font-weight:700;">Exam in progress</div>' +
-    '<div style="font-size:17px;max-width:520px;line-height:1.5;">' +
-    'This exam is monitored. You must stay in <b>fullscreen</b> and <b>must not leave the browser</b>. ' +
-    'Leaving fullscreen or switching away is recorded.</div>';
-  const btn = document.createElement('button');
-  btn.textContent = 'Enter fullscreen & continue';
-  btn.setAttribute(
+    '<div style="font-size:17px;max-width:540px;line-height:1.5;">' +
+    'This exam is monitored and must stay in <b>fullscreen</b>. Only finish once you have ' +
+    '<b>submitted your answers</b> — finishing ends monitoring.</div>';
+
+  const row = document.createElement('div');
+  row.setAttribute('style', 'display:flex;gap:12px;flex-wrap:wrap;justify-content:center;');
+
+  const cont = document.createElement('button');
+  cont.textContent = 'Continue in fullscreen';
+  cont.setAttribute(
     'style',
-    'font-size:16px;font-weight:600;padding:12px 22px;border:0;border-radius:8px;' +
-      'background:#2563eb;color:#fff;cursor:pointer;',
+    'font-size:16px;font-weight:600;padding:12px 22px;border:0;border-radius:8px;background:#2563eb;color:#fff;cursor:pointer;',
   );
-  btn.addEventListener('click', async () => {
-    try {
-      await document.documentElement.requestFullscreen();
-      o.style.display = 'none';
-    } catch (_) {
-      /* user denied / not allowed — overlay stays */
-    }
-  });
-  o.appendChild(btn);
+  cont.addEventListener('click', enterFullscreen);
+
+  const fin = document.createElement('button');
+  fin.textContent = 'Finish & end exam';
+  fin.setAttribute(
+    'style',
+    'font-size:16px;font-weight:600;padding:12px 22px;border:1px solid #94a3b8;border-radius:8px;background:transparent;color:#e2e8f0;cursor:pointer;',
+  );
+  fin.addEventListener('click', finishExam);
+
+  row.appendChild(cont);
+  row.appendChild(fin);
+  o.appendChild(row);
   (document.body || document.documentElement).appendChild(o);
-  fsOverlay = o;
+  return o;
+}
+
+function showPrompt() {
+  if (!fsActive) return;
+  if (!fsOverlay) fsOverlay = buildOverlay();
+  fsOverlay.style.display = 'flex';
+}
+
+function hidePrompt() {
+  if (fsOverlay) fsOverlay.style.display = 'none';
+}
+
+async function enterFullscreen() {
+  try {
+    if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+    // Capture Esc so a short press prompts instead of instantly exiting
+    // (holding Esc still force-exits — the browser's mandatory safety valve).
+    if (navigator.keyboard && navigator.keyboard.lock) {
+      try {
+        await navigator.keyboard.lock(['Escape']);
+      } catch (_) {}
+    }
+    hidePrompt();
+  } catch (_) {
+    /* denied / not allowed — prompt stays */
+  }
+}
+
+function finishExam() {
+  fsActive = false;
+  try {
+    chrome.runtime.sendMessage({ type: '__proctor_finish' });
+  } catch (_) {}
+  try {
+    if (navigator.keyboard && navigator.keyboard.unlock) navigator.keyboard.unlock();
+  } catch (_) {}
+  hidePrompt();
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
 }
 
 async function initFullscreenLock() {
@@ -131,14 +176,23 @@ async function initFullscreenLock() {
   }
   if (!enrollment || !onExamPage(examLink)) return;
 
-  if (!document.fullscreenElement) showFullscreenOverlay();
+  if (!document.fullscreenElement) showPrompt();
+
+  // A short Esc while locked in fullscreen prompts instead of exiting.
+  document.addEventListener('keydown', (e) => {
+    if (fsActive && e.key === 'Escape' && document.fullscreenElement) {
+      e.preventDefault();
+      showPrompt();
+    }
+  });
 
   document.addEventListener('fullscreenchange', () => {
+    if (!fsActive) return;
     if (document.fullscreenElement) {
-      if (fsOverlay) fsOverlay.style.display = 'none';
+      hidePrompt();
     } else {
       send('FULLSCREEN_EXIT', { url: location.href });
-      showFullscreenOverlay();
+      showPrompt();
     }
   });
 }
