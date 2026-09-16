@@ -38,6 +38,7 @@ async function join() {
   $('error').textContent = '';
 
   if (!studentName) return ($('error').textContent = 'Enter your name.');
+  if (!studentId) return ($('error').textContent = 'Enter your student ID.');
   if (!code) return ($('error').textContent = 'Enter the join code.');
 
   $('join').disabled = true;
@@ -47,7 +48,7 @@ async function join() {
     const res = await fetch(`${base}/exams/${code}/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ studentName, studentId: studentId || undefined }),
+      body: JSON.stringify({ studentName, studentId }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
