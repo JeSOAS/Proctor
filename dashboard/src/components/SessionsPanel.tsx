@@ -99,6 +99,20 @@ function buildLogRows(violations: any[]): LogRow[] {
         push(v, v.payload?.seconds != null ? `offline ${fmtGap(v.payload.seconds)}` : '', 'plain');
         break;
       default:
+        // The extensions page gets a clear label (it's where they'd disable us).
+        if (/^(chrome|edge):\/\/extensions/i.test(v.url || '')) {
+          rows.push({
+            key: String(v.id),
+            label: 'Opened extension settings',
+            time: new Date(v.occurredAt).toLocaleTimeString(),
+            detail: v.url || '',
+            help: 'Opened the browser extensions page during the exam — where the extension could be disabled.',
+            concerning: !!v.concerning,
+            postSubmission: !!v.postSubmission,
+            tone: 'plain',
+          });
+          break;
+        }
         // Tab activity (navigate/switch/create/close) + clipboard: show the FULL
         // URL — teachers need to see exactly which page it was.
         push(v, v.url || '', 'plain');
@@ -288,7 +302,12 @@ export function SessionsPanel({ exam }: { exam: any }) {
                   <WarningBadge count={s.concerningCount ?? 0} max={max} aiUsed={s.aiUsed} />
                   <NoExamBadge show={s.didNotOpenExam} />
                   <TimingBadges late={s.startedLate} early={s.finishedEarly} />
-                  <AttentionBadges idle={s.idle} reconnects={s.reconnectCount} />
+                  <AttentionBadges
+                    idle={s.idle}
+                    reconnects={s.reconnectCount}
+                    tamper={s.tamperIntent}
+                    unaccountedSec={s.unaccountedSec}
+                  />
                 </div>
                 <div className="text-xs text-gray-500 dark:text-gray-400">
                   {s.studentId || 'no ID'} · joined {time(s.startedAt)}

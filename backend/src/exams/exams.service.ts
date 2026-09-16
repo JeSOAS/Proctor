@@ -20,6 +20,11 @@ const MAX_EXAM_OPEN_HOURS = 24;
 // flagged "started late" (a small grace absorbs clock skew / a slow first load).
 const LATE_START_GRACE_MS = 60_000;
 
+// The read paths run housekeeping (auto-close expired exams, end their sessions)
+// on every request. With the dashboard polling every ~5s that's wasteful, so it
+// runs at most this often; a few seconds' lag in auto-expiry is harmless.
+const MAINTENANCE_THROTTLE_MS = 15_000;
+
 // Ownership is enforced through the chain Exam -> Course -> Teacher: every query
 // filters by the teacher, so a teacher can only ever touch their own exams.
 @Injectable()
@@ -118,7 +123,7 @@ export class ExamsService {
     const events = ids.length
       ? await this.prisma.violation.findMany({
           where: { sessionId: { in: ids } },
-          select: { id: true, sessionId: true, type: true, url: true, occurredAt: true },
+          select: { id: true, sessionId: true, type: true, url: true, payload: true, occurredAt: true },
           orderBy: { occurredAt: 'asc' },
         })
       : [];
@@ -148,6 +153,8 @@ export class ExamsService {
         idle: r.idle,
         reconnectCount: r.reconnectCount,
         frequentReconnect: r.reconnectCount > 2,
+        tamperIntent: r.tamperIntent,
+        unaccountedSec: r.unaccountedSec,
       };
     });
   }
@@ -315,7 +322,10 @@ export class ExamsService {
   /// Auto-close OPEN exams whose end time has passed, or (as a safeguard) that
   /// have been open with no end time for longer than MAX_EXAM_OPEN_HOURS. Called
   /// on the instructor read paths so the view reflects reality. Global + idempotent.
+  private lastExpiryRun = 0;
   private async closeExpiredExams() {
+    if (Date.now() - this.lastExpiryRun < MAINTENANCE_THROTTLE_MS) return;
+    this.lastExpiryRun = Date.now();
     const now = new Date();
     const safeguardCutoff = new Date(now.getTime() - MAX_EXAM_OPEN_HOURS * 3_600_000);
     await this.prisma.exam.updateMany({

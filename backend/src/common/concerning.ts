@@ -6,6 +6,27 @@ import { DomainRule, isAiHost, isAllowedUrl, ruleMatches } from './allowed-domai
 // isn't evidence of cheating. (Policy chosen with the user: "count only if long".)
 const CONCERNING_BLUR_MS = 30_000;
 
+// The browser's own extensions page — where the student would go to disable
+// this extension. Navigating here during an exam is a tampering-intent signal
+// (and the extension is still alive to report it before being turned off).
+function isTamperPage(url: string | null): boolean {
+  if (!url) return false;
+  const u = url.toLowerCase();
+  return u.startsWith('chrome://extensions') || u.startsWith('edge://extensions');
+}
+
+// Read the gap seconds from a RECONNECT/LONG_DISCONNECT payload (string or object).
+function gapSeconds(payload: unknown): number {
+  if (payload == null) return 0;
+  try {
+    const p = typeof payload === 'string' ? JSON.parse(payload) : payload;
+    const s = (p as { seconds?: unknown })?.seconds;
+    return typeof s === 'number' && s > 0 ? s : 0;
+  } catch {
+    return 0;
+  }
+}
+
 // Browser-internal pages are never a violation — opening a new tab lands on one.
 const ALLOWED_SCHEMES = new Set([
   'chrome:',
@@ -21,6 +42,8 @@ export interface ClassifiableEvent {
   type: string;
   url: string | null;
   occurredAt: Date;
+  /** Stringified JSON (or object) — used to read disconnect gap seconds. */
+  payload?: unknown;
 }
 
 export interface ClassifyResult {
@@ -40,6 +63,10 @@ export interface ClassifyResult {
   idle: boolean;
   /** How many times the student reconnected (RECONNECT + LONG_DISCONNECT). */
   reconnectCount: number;
+  /** The student opened the browser's extensions page (tampering intent). */
+  tamperIntent: boolean;
+  /** Total seconds the student was disconnected but returned — "unaccounted" time. */
+  unaccountedSec: number;
 }
 
 /** Extract a bare host from a domain OR a full URL a teacher typed as the exam link. */
@@ -111,6 +138,8 @@ export function classify(
   let submittedAt: Date | null = null;
   let idle = false;
   let reconnectCount = 0;
+  let tamperIntent = false;
+  let unaccountedSec = 0;
   let lastNavHostPath: string | undefined;
   let pendingBlur: ClassifiableEvent | null = null;
 
@@ -163,6 +192,11 @@ export function classify(
       case 'TAB_NAVIGATE':
       case 'TAB_SWITCH': {
         noteVisit(ev.url);
+        if (isTamperPage(ev.url)) {
+          tamperIntent = true;
+          flag(ev.id); // opened the extensions page during the exam
+          break;
+        }
         const { hostPath } = parse(ev.url);
         if (hostPath && hostPath === lastNavHostPath) break; // same page, query-only change
         if (hostPath) lastNavHostPath = hostPath;
@@ -190,10 +224,12 @@ export function classify(
 
       case 'RECONNECT':
         reconnectCount++; // brief drop, recovered — not counted, just tallied
+        unaccountedSec += gapSeconds(ev.payload);
         break;
 
       case 'LONG_DISCONNECT':
         reconnectCount++;
+        unaccountedSec += gapSeconds(ev.payload);
         flag(ev.id); // a significant disconnect counts
         break;
 
@@ -222,6 +258,8 @@ export function classify(
     submittedAt,
     idle,
     reconnectCount,
+    tamperIntent,
+    unaccountedSec,
   };
 }
 

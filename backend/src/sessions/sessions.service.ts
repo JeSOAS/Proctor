@@ -51,26 +51,30 @@ export class SessionsService {
       },
     });
 
-    // Re-classify the session so the extension can (optionally) warn the student
-    // and so auto-close can fire when the limit is reached. This is the live
-    // counterpart of the read-time count on the dashboard.
-    const [events, session] = await Promise.all([
-      this.prisma.violation.findMany({
-        where: { sessionId },
-        select: { id: true, type: true, url: true, occurredAt: true },
-        orderBy: { occurredAt: 'asc' },
-      }),
-      this.prisma.studentSession.findUnique({
-        where: { id: sessionId },
-        select: {
-          status: true,
-          exam: {
-            select: { examLink: true, maxWarnings: true, autoClose: true, notifyStudent: true },
-          },
+    // Only the student-warning and auto-close features need a live count. If the
+    // exam uses neither, skip the extra query + re-classification entirely — the
+    // dashboard computes everything at read time anyway. This keeps the write
+    // path cheap under exam load (dozens of students reporting many events).
+    const settings = await this.prisma.studentSession.findUnique({
+      where: { id: sessionId },
+      select: {
+        status: true,
+        exam: {
+          select: { examLink: true, maxWarnings: true, autoClose: true, notifyStudent: true },
         },
-      }),
-    ]);
-    const exam = session?.exam;
+      },
+    });
+    const exam = settings?.exam;
+    if (!exam?.notifyStudent && !exam?.autoClose) {
+      return { id: created.id, concerning: false, concerningCount: 0, maxWarnings: exam?.maxWarnings ?? 3, notifyStudent: false, autoClosed: false };
+    }
+
+    const events = await this.prisma.violation.findMany({
+      where: { sessionId },
+      select: { id: true, type: true, url: true, payload: true, occurredAt: true },
+      orderBy: { occurredAt: 'asc' },
+    });
+    const session = settings;
     const r = classify(events, { examLink: exam?.examLink });
     const concerningCount = r.concerning.size;
     const maxWarnings = exam?.maxWarnings ?? 3;
@@ -179,7 +183,10 @@ export class SessionsService {
   /// paths so the instructor view reflects reality.
   ///   ACTIVE, no beat for STALE_TIMEOUT   -> DISCONNECTED (recording when)
   ///   DISCONNECTED past the resume window -> ENDED (reason TIMEOUT)
+  private lastStaleRun = 0;
   async expireStale() {
+    if (Date.now() - this.lastStaleRun < 15_000) return; // throttle: polled ~5s, sweep ~15s
+    this.lastStaleRun = Date.now();
     const now = Date.now();
     const staleCutoff = new Date(now - STALE_TIMEOUT_MS);
     const graceCutoff = new Date(now - RESUME_WINDOW_MS);

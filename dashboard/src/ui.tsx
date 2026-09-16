@@ -85,32 +85,6 @@ export function HelpIcon({ text }: { text: string }) {
   );
 }
 
-// Events that suggest the student left the exam or used the clipboard (kept in
-// sync with the backend's CONCERNING_TYPES).
-const CONCERNING = new Set([
-  'WINDOW_BLUR',
-  'TAB_SWITCH',
-  'TAB_NAVIGATE',
-  'TAB_CREATED',
-  'COPY',
-  'PASTE',
-  'CUT',
-  'LONG_DISCONNECT',
-]);
-
-export function isConcerning(type: string) {
-  return CONCERNING.has(type);
-}
-
-// `concerning` comes from the backend (URL/duration-aware). When provided it
-// wins; otherwise we fall back to the coarse type-only check.
-export function violationClasses(type: string, concerning?: boolean) {
-  const flagged = concerning ?? isConcerning(type);
-  return flagged
-    ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-    : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300';
-}
-
 /// Tiered warning: none (0) · orange (below max) · red (at max) · red + text (over).
 /// `aiUsed` adds a loud "AI used" flag regardless of the count.
 export function WarningBadge({ count, max, aiUsed }: { count: number; max: number; aiUsed?: boolean }) {
@@ -164,16 +138,44 @@ export function TimingBadges({ late, early }: { late?: boolean; early?: boolean 
   );
 }
 
-/// Non-counting attention flags shown alongside the warnings: went idle, or
-/// reconnected an unusual number of times.
-export function AttentionBadges({ idle, reconnects }: { idle?: boolean; reconnects?: number }) {
+function fmtDur(sec: number): string {
+  if (sec < 60) return `${sec}s`;
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return s ? `${m}m ${s}s` : `${m}m`;
+}
+
+/// Attention flags shown alongside the warnings. `tamper` counts (it's a real
+/// violation); the rest are context: went idle, reconnected a lot, or had
+/// monitoring gaps ("unaccounted" time while they kept coming back).
+export function AttentionBadges({
+  idle,
+  reconnects,
+  tamper,
+  unaccountedSec,
+}: {
+  idle?: boolean;
+  reconnects?: number;
+  tamper?: boolean;
+  unaccountedSec?: number;
+}) {
   const pill = 'inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full';
   return (
     <>
+      {tamper && (
+        <span className={`${pill} bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-200`}>
+          🛠 Opened extension settings
+        </span>
+      )}
       {idle && <span className={`${pill} bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200`}>💤 Went idle</span>}
       {typeof reconnects === 'number' && reconnects > 2 && (
         <span className={`${pill} bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300`}>
           🔌 Reconnected {reconnects}×
+        </span>
+      )}
+      {typeof unaccountedSec === 'number' && unaccountedSec >= 60 && (
+        <span className={`${pill} bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300`}>
+          🕳 {fmtDur(unaccountedSec)} unaccounted
         </span>
       )}
     </>
