@@ -148,6 +148,7 @@ export class ExamsService {
         didNotOpenExam: !!exam.examLink && !r.visitedExamLink,
         examStartedAt: r.examStartedAt,
         submittedAt: r.submittedAt,
+        submissionConfirmed: r.submissionConfirmed,
         startedLate,
         finishedEarly,
         idle: r.idle,

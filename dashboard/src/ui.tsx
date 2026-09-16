@@ -115,6 +115,17 @@ export function WarningBadge({ count, max, aiUsed }: { count: number; max: numbe
   );
 }
 
+/// Positive indicator: the platform (via the submission webhook) authoritatively
+/// confirmed this student submitted — distinct from the extension's own detection.
+export function SubmissionBadge({ confirmed }: { confirmed?: boolean }) {
+  if (!confirmed) return null;
+  return (
+    <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+      ✔ Submission confirmed
+    </span>
+  );
+}
+
 /// Flag for a session that never visited the exam's required link (extension
 /// off too soon, or the student never actually opened the exam).
 export function NoExamBadge({ show }: { show?: boolean }) {
@@ -202,6 +213,7 @@ const EVENT_LABELS: Record<string, string> = {
   REJOIN: 'Re-joined the exam',
   EXAM_STARTED: 'Opened the exam',
   EXAM_SUBMITTED: 'Submitted the exam',
+  SUBMISSION_CONFIRMED: 'Submission confirmed (form)',
 };
 export function eventLabel(type: string): string {
   return EVENT_LABELS[type] || type;
@@ -224,7 +236,8 @@ const EVENT_HELP: Record<string, string> = {
   RECONNECT: 'The student reconnected after a short drop.',
   REJOIN: 'The student left and re-joined the exam (same session continued).',
   EXAM_STARTED: 'The student opened the exam page.',
-  EXAM_SUBMITTED: 'The student submitted the exam.',
+  EXAM_SUBMITTED: 'The student submitted the exam (detected by the extension).',
+  SUBMISSION_CONFIRMED: 'The exam platform confirmed this submission (authoritative).',
 };
 export function eventHelp(type: string): string {
   return EVENT_HELP[type] || 'Recorded activity.';

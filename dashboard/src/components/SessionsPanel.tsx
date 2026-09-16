@@ -8,6 +8,7 @@ import {
   NoExamBadge,
   SearchBar,
   StatusPill,
+  SubmissionBadge,
   TimingBadges,
   WarningBadge,
   btn,
@@ -91,6 +92,7 @@ function buildLogRows(violations: any[]): LogRow[] {
         break;
       case 'EXAM_STARTED':
       case 'EXAM_SUBMITTED':
+      case 'SUBMISSION_CONFIRMED':
       case 'REJOIN':
         push(v, v.url || '', 'exam');
         break;
@@ -300,6 +302,7 @@ export function SessionsPanel({ exam }: { exam: any }) {
                   <StatusPill session={s} examClosed={examClosed} />
                   <span className="text-gray-900 dark:text-gray-100">{s.studentName}</span>
                   <WarningBadge count={s.concerningCount ?? 0} max={max} aiUsed={s.aiUsed} />
+                  <SubmissionBadge confirmed={s.submissionConfirmed} />
                   <NoExamBadge show={s.didNotOpenExam} />
                   <TimingBadges late={s.startedLate} early={s.finishedEarly} />
                   <AttentionBadges

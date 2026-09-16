@@ -57,8 +57,10 @@ export interface ClassifyResult {
   visitedExamLink: boolean;
   /** When the student first opened the exam page (EXAM_STARTED, or first exam-host visit). */
   examStartedAt: Date | null;
-  /** When the student submitted the exam (EXAM_SUBMITTED), if detected. */
+  /** When the student submitted the exam (EXAM_SUBMITTED / SUBMISSION_CONFIRMED). */
   submittedAt: Date | null;
+  /** The submission was confirmed authoritatively by the platform webhook. */
+  submissionConfirmed: boolean;
   /** The student went idle at least once (recorded, not counted). */
   idle: boolean;
   /** How many times the student reconnected (RECONNECT + LONG_DISCONNECT). */
@@ -136,6 +138,7 @@ export function classify(
   let visitedExamLink = false;
   let examStartedAt: Date | null = null;
   let submittedAt: Date | null = null;
+  let submissionConfirmed = false;
   let idle = false;
   let reconnectCount = 0;
   let tamperIntent = false;
@@ -173,8 +176,10 @@ export function classify(
         visitedExamLink = true;
         break;
 
-      case 'EXAM_SUBMITTED':
+      case 'EXAM_SUBMITTED': // extension-detected (Google Forms formResponse)
+      case 'SUBMISSION_CONFIRMED': // authoritative, from the platform webhook
         if (!submittedAt) submittedAt = ev.occurredAt;
+        if (ev.type === 'SUBMISSION_CONFIRMED') submissionConfirmed = true;
         break;
 
       case 'WINDOW_BLUR':
@@ -256,6 +261,7 @@ export function classify(
     visitedExamLink,
     examStartedAt,
     submittedAt,
+    submissionConfirmed,
     idle,
     reconnectCount,
     tamperIntent,

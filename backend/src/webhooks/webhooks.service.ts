@@ -58,7 +58,9 @@ export class WebhooksService {
     await this.prisma.violation.create({
       data: {
         sessionId: session.id,
-        type: 'EXAM_SUBMITTED',
+        // Distinct from the extension's own EXAM_SUBMITTED so the dashboard can
+        // show this as an authoritative, platform-confirmed submission.
+        type: 'SUBMISSION_CONFIRMED',
         url: input.publishedUrl || null,
         occurredAt: input.submittedAt ? new Date(input.submittedAt) : new Date(),
       },
