@@ -22,6 +22,22 @@ export class WebhooksService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
+   * The set of Google Form tokens the Apps Script should watch — derived from
+   * every exam's `examLink`. The script enumerates the teacher's own forms and
+   * installs a submit trigger on the ones whose published token is in this list,
+   * so teachers never touch the script per exam.
+   */
+  async listWatchedFormTokens(): Promise<{ forms: string[] }> {
+    const exams = await this.prisma.exam.findMany({
+      where: { examLink: { not: null } },
+      select: { examLink: true },
+    });
+    const tokens = new Set<string>();
+    for (const e of exams) formTokens(e.examLink).forEach((t) => tokens.add(t));
+    return { forms: [...tokens] };
+  }
+
+  /**
    * Record a Google Forms submission reported by the Apps Script webhook.
    * Correlates the FORM to an exam via the exam's stored `examLink`, and the
    * STUDENT to a session via the (digits-only) student id, then writes an

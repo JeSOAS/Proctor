@@ -14,30 +14,29 @@ server, when a response is submitted — no heuristics, unspoofable.
   the AU email (`u1234567@au.edu` → `1234567`). This is why the join id and the
   form id line up even if formatting differs.
 
-## One-time setup
+## Admin setup (once per teacher — no per-exam work afterwards)
 
 1. Set `WEBHOOK_SECRET` in `docker/.env` on the VM to a long random value and
    redeploy (it's already wired into docker-compose + the backend).
-2. Go to https://script.google.com → **New project** → paste `Code.gs`.
+2. In the **teacher's** Google account: https://script.google.com → **New
+   project** → paste `Code.gs`.
 3. Set `BACKEND_URL` and `WEBHOOK_SECRET` at the top (secret must match step 1).
+4. In the toolbar dropdown choose **`installAutoSync`**, click **Run**, and
+   authorize. Done — the script now re-syncs every 10 minutes.
 
-## Per new form (~30 seconds, no coding)
+## Teacher, per exam — 2 pages only
 
-1. Build the Google Form as usual. Ensure it **collects email addresses**
-   (Settings → Responses) **or** has a **"Student ID"** question.
-2. Copy the form's id from its **edit** URL: `.../forms/d/`**`<FORM_ID>`**`/edit`,
-   and add it to the `FORM_IDS` list at the top of `Code.gs`, e.g.
-   `const FORM_IDS = ['1AbCd...'];`.
-3. In the Apps Script editor toolbar, choose the function **`setup`** from the
-   dropdown next to **Run**, then click **Run**. Authorize when prompted (first
-   time only). This installs the submit trigger on every form in `FORM_IDS`.
-4. On the Proctor dashboard, set that form's URL as the exam's **Exam link**.
+1. **Exam platform:** build the Google Form in this account, and turn ON
+   **Collect email addresses** (Settings → Responses) **or** add a **"Student
+   ID"** question.
+2. **Proctor:** set that form's URL as the exam's **Exam link**.
 
-Re-run `setup` whenever you add a form. Reusing an existing form needs no repeat.
+Within ~10 minutes the script auto-installs the submit trigger on the form and
+starts confirming submissions. Nothing else to do — no per-form scripting.
 
-> Note: don't run `onFormSubmit` or `registerForm` directly — `onFormSubmit`
-> needs a real submission event, and `registerForm` needs an argument the Run
-> button can't pass. Always run **`setup`**.
+> How it stays in sync: the script asks the backend (`GET /webhooks/forms`)
+> which form tokens to watch — derived from the exams' Exam links — then finds
+> those among the teacher's own forms and installs/removes triggers to match.
 
 ## Verify it works
 

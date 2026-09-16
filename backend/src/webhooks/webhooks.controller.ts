@@ -1,4 +1,4 @@
-import { Body, Controller, Headers, Post, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post, UnauthorizedException } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { WebhooksService } from './webhooks.service';
 
@@ -10,12 +10,23 @@ import { WebhooksService } from './webhooks.service';
 export class WebhooksController {
   constructor(private readonly webhooks: WebhooksService) {}
 
-  @Post('form-submit')
-  formSubmit(@Headers('x-webhook-secret') secret: string, @Body() body: any) {
+  private assertSecret(secret: string) {
     const expected = process.env.WEBHOOK_SECRET;
     if (!expected || secret !== expected) {
       throw new UnauthorizedException('invalid or unconfigured webhook secret');
     }
+  }
+
+  // Which forms should the Apps Script watch (auto-sync from the exam links).
+  @Get('forms')
+  forms(@Headers('x-webhook-secret') secret: string) {
+    this.assertSecret(secret);
+    return this.webhooks.listWatchedFormTokens();
+  }
+
+  @Post('form-submit')
+  formSubmit(@Headers('x-webhook-secret') secret: string, @Body() body: any) {
+    this.assertSecret(secret);
     return this.webhooks.recordFormSubmission(body ?? {});
   }
 }
