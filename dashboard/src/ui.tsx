@@ -164,6 +164,22 @@ export function TimingBadges({ late, early }: { late?: boolean; early?: boolean 
   );
 }
 
+/// Non-counting attention flags shown alongside the warnings: went idle, or
+/// reconnected an unusual number of times.
+export function AttentionBadges({ idle, reconnects }: { idle?: boolean; reconnects?: number }) {
+  const pill = 'inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full';
+  return (
+    <>
+      {idle && <span className={`${pill} bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200`}>💤 Went idle</span>}
+      {typeof reconnects === 'number' && reconnects > 2 && (
+        <span className={`${pill} bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300`}>
+          🔌 Reconnected {reconnects}×
+        </span>
+      )}
+    </>
+  );
+}
+
 // Plain-English labels for the raw event types — teachers shouldn't need to
 // know what "WINDOW_BLUR" means.
 const EVENT_LABELS: Record<string, string> = {
@@ -172,6 +188,8 @@ const EVENT_LABELS: Record<string, string> = {
   TAB_CREATED: 'Opened a new tab',
   TAB_CLOSED: 'Closed a tab',
   NEW_WINDOW: 'Opened a new window',
+  FULLSCREEN_EXIT: 'Left fullscreen',
+  IDLE: 'Went idle (no activity)',
   WINDOW_BLUR: 'Left the Chrome window',
   WINDOW_FOCUS: 'Returned to Chrome',
   COPY: 'Copied text',
@@ -194,6 +212,8 @@ const EVENT_HELP: Record<string, string> = {
   TAB_CREATED: 'The student opened a new browser tab.',
   TAB_CLOSED: 'The student closed a browser tab.',
   NEW_WINDOW: 'The student opened a separate browser window.',
+  FULLSCREEN_EXIT: 'The student left the enforced fullscreen during the exam.',
+  IDLE: 'No mouse/keyboard/scroll activity for a while — the student may be away or off-screen.',
   WINDOW_BLUR: 'The student left the Chrome window — e.g. switched to another app or screen.',
   COPY: 'The student copied text on this page.',
   CUT: 'The student cut text on this page.',

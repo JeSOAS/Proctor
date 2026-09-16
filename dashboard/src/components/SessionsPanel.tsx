@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import {
+  AttentionBadges,
   HelpIcon,
   InfoDot,
   JoinCode,
@@ -287,6 +288,7 @@ export function SessionsPanel({ exam }: { exam: any }) {
                   <WarningBadge count={s.concerningCount ?? 0} max={max} aiUsed={s.aiUsed} />
                   <NoExamBadge show={s.didNotOpenExam} />
                   <TimingBadges late={s.startedLate} early={s.finishedEarly} />
+                  <AttentionBadges idle={s.idle} reconnects={s.reconnectCount} />
                 </div>
                 <div className="text-xs text-gray-500 dark:text-gray-400">
                   {s.studentId || 'no ID'} · joined {time(s.startedAt)}

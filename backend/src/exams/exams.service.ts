@@ -145,6 +145,9 @@ export class ExamsService {
         submittedAt: r.submittedAt,
         startedLate,
         finishedEarly,
+        idle: r.idle,
+        reconnectCount: r.reconnectCount,
+        frequentReconnect: r.reconnectCount > 2,
       };
     });
   }

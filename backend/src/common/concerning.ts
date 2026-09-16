@@ -36,6 +36,10 @@ export interface ClassifyResult {
   examStartedAt: Date | null;
   /** When the student submitted the exam (EXAM_SUBMITTED), if detected. */
   submittedAt: Date | null;
+  /** The student went idle at least once (recorded, not counted). */
+  idle: boolean;
+  /** How many times the student reconnected (RECONNECT + LONG_DISCONNECT). */
+  reconnectCount: number;
 }
 
 /** Extract a bare host from a domain OR a full URL a teacher typed as the exam link. */
@@ -105,6 +109,8 @@ export function classify(
   let visitedExamLink = false;
   let examStartedAt: Date | null = null;
   let submittedAt: Date | null = null;
+  let idle = false;
+  let reconnectCount = 0;
   let lastNavHostPath: string | undefined;
   let pendingBlur: ClassifiableEvent | null = null;
 
@@ -182,19 +188,41 @@ export function classify(
         if (!isAllowedTarget(ev.url)) flag(ev.id);
         break;
 
+      case 'RECONNECT':
+        reconnectCount++; // brief drop, recovered — not counted, just tallied
+        break;
+
       case 'LONG_DISCONNECT':
-        flag(ev.id); // no URL context; a significant disconnect always counts
+        reconnectCount++;
+        flag(ev.id); // a significant disconnect counts
+        break;
+
+      case 'IDLE':
+        idle = true; // recorded + badged, but never counted (student's own call)
+        break;
+
+      case 'FULLSCREEN_EXIT':
+        flag(ev.id); // left the locked fullscreen during the exam — counts
         break;
 
       default:
-        break; // TAB_CLOSED / WINDOW_FOCUS / RECONNECT etc. are never concerning
+        break; // TAB_CLOSED / WINDOW_FOCUS / REJOIN etc. are never concerning
     }
   }
 
   // A blur that never got a matching focus = they left and didn't return.
   if (pendingBlur) flag(pendingBlur.id);
 
-  return { concerning, postSubmission, aiUsed, visitedExamLink, examStartedAt, submittedAt };
+  return {
+    concerning,
+    postSubmission,
+    aiUsed,
+    visitedExamLink,
+    examStartedAt,
+    submittedAt,
+    idle,
+    reconnectCount,
+  };
 }
 
 /** Backwards-compatible helper: just the set of concerning event ids. */

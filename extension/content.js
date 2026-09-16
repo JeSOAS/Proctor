@@ -56,3 +56,93 @@ function detectGoogleFormSubmit() {
 }
 
 detectGoogleFormSubmit();
+
+// ---------- Fullscreen lock ----------
+//
+// While a student is enrolled AND on the exam page, require fullscreen. Show a
+// blocking overlay that they must click to enter fullscreen; if they leave
+// fullscreen, re-show it and report FULLSCREEN_EXIT. Entering fullscreen needs a
+// user gesture, so it's driven by the button click.
+
+function hostOf(value) {
+  if (!value) return '';
+  try {
+    return new URL(value.startsWith('http') ? value : 'https://' + value).host.toLowerCase();
+  } catch (_) {
+    return '';
+  }
+}
+
+function onExamPage(examLink) {
+  const examHost = hostOf(examLink);
+  if (!examHost) return false;
+  const h = location.host.toLowerCase();
+  return h === examHost || h.endsWith('.' + examHost);
+}
+
+let fsOverlay = null;
+
+function showFullscreenOverlay() {
+  if (fsOverlay) {
+    fsOverlay.style.display = 'flex';
+    return;
+  }
+  const o = document.createElement('div');
+  o.id = '__proctor_fs_overlay';
+  o.setAttribute(
+    'style',
+    'position:fixed;inset:0;z-index:2147483647;display:flex;flex-direction:column;' +
+      'align-items:center;justify-content:center;gap:20px;text-align:center;padding:24px;' +
+      'background:rgba(15,23,42,0.97);color:#fff;font-family:system-ui,-apple-system,sans-serif;',
+  );
+  o.innerHTML =
+    '<div style="font-size:26px;font-weight:700;">Exam in progress</div>' +
+    '<div style="font-size:17px;max-width:520px;line-height:1.5;">' +
+    'This exam is monitored. You must stay in <b>fullscreen</b> and <b>must not leave the browser</b>. ' +
+    'Leaving fullscreen or switching away is recorded.</div>';
+  const btn = document.createElement('button');
+  btn.textContent = 'Enter fullscreen & continue';
+  btn.setAttribute(
+    'style',
+    'font-size:16px;font-weight:600;padding:12px 22px;border:0;border-radius:8px;' +
+      'background:#2563eb;color:#fff;cursor:pointer;',
+  );
+  btn.addEventListener('click', async () => {
+    try {
+      await document.documentElement.requestFullscreen();
+      o.style.display = 'none';
+    } catch (_) {
+      /* user denied / not allowed — overlay stays */
+    }
+  });
+  o.appendChild(btn);
+  (document.body || document.documentElement).appendChild(o);
+  fsOverlay = o;
+}
+
+async function initFullscreenLock() {
+  let enrollment, examLink;
+  try {
+    const store = await chrome.storage.local.get('enrollment');
+    enrollment = store.enrollment;
+    examLink = enrollment && enrollment.examLink;
+  } catch (_) {
+    return;
+  }
+  if (!enrollment || !onExamPage(examLink)) return;
+
+  if (!document.fullscreenElement) showFullscreenOverlay();
+
+  document.addEventListener('fullscreenchange', () => {
+    if (document.fullscreenElement) {
+      if (fsOverlay) fsOverlay.style.display = 'none';
+    } else {
+      send('FULLSCREEN_EXIT', { url: location.href });
+      showFullscreenOverlay();
+    }
+  });
+}
+
+// document_start can run before <body>; wait for the DOM if needed.
+if (document.body) initFullscreenLock();
+else document.addEventListener('DOMContentLoaded', initFullscreenLock);

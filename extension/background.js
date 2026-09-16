@@ -272,6 +272,18 @@ chrome.windows.onCreated.addListener(async (win) => {
   report('NEW_WINDOW', { windowId: win.id, url });
 });
 
+// ---------- Idle detection ----------
+//
+// Flags a student who stops interacting (no mouse/keyboard/scroll) — they may be
+// away or working off-screen while the exam tab stays focused. Recorded as a
+// flag, not counted as a violation. Min detection interval is 15s.
+
+const IDLE_SECONDS = 120; // 2 minutes
+chrome.idle.setDetectionInterval(IDLE_SECONDS);
+chrome.idle.onStateChanged.addListener((state) => {
+  if (state === 'idle' || state === 'locked') report('IDLE', { state });
+});
+
 // ---------- Window events ----------
 
 chrome.windows.onFocusChanged.addListener(async (windowId) => {
