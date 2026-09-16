@@ -1,19 +1,29 @@
 # Proctor — Exam Monitoring Chrome Extension
 
-Lightweight Chrome extension for monitoring student behavior during online exam sessions, with a NestJS backend that records monitoring events. Senior Project 2.
+Chrome extension for monitoring student behaviour during online exams, with a
+NestJS backend and a React instructor dashboard. Senior Project 2.
 
 ## Project Structure
 
 ```
 proctor/
 ├── extension/       # Chrome Extension (MV3) — see extension/README.md
-├── backend/         # NestJS API + Prisma — see backend/README.md
-├── docker/          # docker-compose (PostgreSQL + Redis) for the VM deployment
-└── TESTING.md       # manual test checklist for the monitoring logic
+├── backend/         # NestJS API + Prisma (PostgreSQL) — serves the dashboard
+├── dashboard/       # React (Vite) instructor dashboard — served at /dashboard
+├── docker/          # docker-compose (PostgreSQL + Cloudflare tunnel) for the VM
+├── deploy.sh        # one-shot VM deploy (pull + rebuild + health check)
+└── docs/            # DEPLOYMENT, DECISIONS, MONITORING, TESTING-COMMANDS
 ```
 
-An instructor dashboard (React) is planned for a later phase. Local development
-uses SQLite (no Docker needed); the compose file is for the production Linux VM.
+**How it fits together:** the extension reports events → the backend classifies
+them and serves the dashboard → teachers watch live at `/dashboard`. The
+monitoring model, every flag, the tuning knobs, and the known limitations are
+documented in **[docs/MONITORING.md](docs/MONITORING.md)** — start there.
+
+Deployment is on an Oracle Linux VM via Cloudflare Tunnel at
+`https://proctor.jesoas.org` (dashboard at `/dashboard`). Both the backend and
+the dashboard use **PostgreSQL** (via Prisma); run the compose stack locally if
+you want a full environment.
 
 ## Prerequisites
 

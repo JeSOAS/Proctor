@@ -3,6 +3,9 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  // Behind the Cloudflare tunnel — trust the proxy so req.ip reflects the
+  // forwarded client (the throttler also reads CF-Connecting-IP directly).
+  app.getHttpAdapter().getInstance().set('trust proxy', true);
   app.enableCors({
     origin: '*',
   });
