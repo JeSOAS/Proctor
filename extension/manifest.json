@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Proctor — Exam Monitoring",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Monitors tab switching, window focus, and clipboard use during online exams you join, to support academic integrity.",
   "permissions": [
     "tabs",
