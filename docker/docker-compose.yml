@@ -41,6 +41,9 @@ services:
       ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN in docker/.env}
       # Signs teacher login tokens (JWT).
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in docker/.env}
+      # Shared secret for the Google Forms submission webhook (optional — the
+      # webhook rejects everything if unset). Must match the Apps Script.
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
     depends_on:
       db:
         condition: service_healthy

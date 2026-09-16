@@ -10,6 +10,7 @@ import { CoursesModule } from './courses/courses.module';
 import { ExamsModule } from './exams/exams.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { SessionsModule } from './sessions/sessions.module';
+import { WebhooksModule } from './webhooks/webhooks.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { SessionsModule } from './sessions/sessions.module';
     CoursesModule,
     SessionsModule,
     ExamsModule,
+    WebhooksModule,
   ],
   controllers: [AppController],
   providers: [{ provide: APP_GUARD, useClass: RealIpThrottlerGuard }],
