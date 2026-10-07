@@ -11,7 +11,7 @@ import { join } from 'path';
 // "docs.google.com/forms" — matches ONLY /forms..., so Google Docs/Sheets on
 // the same host are NOT whitelisted). The AI list is host-only.
 
-const DEFAULT_ALLOWED = ['accounts.google.com', 'docs.google.com/forms', 'forms.gle'];
+const DEFAULT_ALLOWED = ['accounts.google.com', 'docs.google.com/forms', 'forms.gle', 'chromewebstore.google.com'];
 
 const DEFAULT_AI = [
   'chatgpt.com',

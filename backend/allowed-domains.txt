@@ -29,3 +29,5 @@
 accounts.google.com          # Google sign-in / the login redirect chain
 docs.google.com/forms        # Google Forms ONLY — not Docs, Sheets, or Slides
 forms.gle                    # short links that redirect to a Google Form
+chromewebstore.google.com    # installing/checking the Proctor extension right after joining
+                             # (17 false violations in the 17 Sep trial)

@@ -2,7 +2,10 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
+  OnModuleDestroy,
+  OnModuleInit,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
@@ -25,14 +28,34 @@ const LATE_START_GRACE_MS = 60_000;
 // runs at most this often; a few seconds' lag in auto-expiry is harmless.
 const MAINTENANCE_THROTTLE_MS = 15_000;
 
+// Scheduled exams must close at their end time even if nobody has the dashboard
+// open (in the 17 Sep trial an exam ending 10:00 only closed at 11:16, when the
+// instructor next looked, and students kept being monitored). A server timer
+// runs the same expiry sweep, so exams close within this much of endsAt.
+const EXPIRY_SWEEP_MS = 30_000;
+
 // Ownership is enforced through the chain Exam -> Course -> Teacher: every query
 // filters by the teacher, so a teacher can only ever touch their own exams.
 @Injectable()
-export class ExamsService {
+export class ExamsService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(ExamsService.name);
+  private sweepTimer?: ReturnType<typeof setInterval>;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly sessions: SessionsService,
   ) {}
+
+  onModuleInit() {
+    this.sweepTimer = setInterval(() => {
+      this.closeExpiredExams().catch((e) => this.logger.warn(`expiry sweep failed: ${e?.message ?? e}`));
+    }, EXPIRY_SWEEP_MS);
+    this.sweepTimer.unref(); // never keep the process alive just for the timer
+  }
+
+  onModuleDestroy() {
+    if (this.sweepTimer) clearInterval(this.sweepTimer);
+  }
 
   async createExam(
     teacherId: string,
@@ -364,8 +387,8 @@ export class ExamsService {
   }
 
   /// Auto-close OPEN exams whose end time has passed, or (as a safeguard) that
-  /// have been open with no end time for longer than MAX_EXAM_OPEN_HOURS. Called
-  /// on the instructor read paths so the view reflects reality. Global + idempotent.
+  /// have been open with no end time for longer than MAX_EXAM_OPEN_HOURS. Runs on
+  /// a server timer (EXPIRY_SWEEP_MS) and on the instructor read paths. Global + idempotent.
   private lastExpiryRun = 0;
   private async closeExpiredExams() {
     if (Date.now() - this.lastExpiryRun < MAINTENANCE_THROTTLE_MS) return;
