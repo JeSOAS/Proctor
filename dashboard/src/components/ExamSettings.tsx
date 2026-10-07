@@ -6,7 +6,8 @@ const numInput =
   'w-20 px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100';
 
 /// Per-exam advanced settings, reusable on the exam list and the exam page.
-/// Max warnings + disconnect grace are functional; the two toggles are stubs.
+/// All fields are functional. Render it only with fresh exam data: it saves every
+/// field at once, so stale initial values would overwrite the saved settings.
 export function ExamSettings({
   exam,
   onSaved,

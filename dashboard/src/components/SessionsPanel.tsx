@@ -130,8 +130,14 @@ function buildLogRows(violations: any[]): LogRow[] {
   return rows;
 }
 
-export function SessionsPanel({ exam }: { exam: any }) {
-  const [status, setStatus] = useState<string>(exam.status);
+export function SessionsPanel({ exam: navExam }: { exam: any }) {
+  // `navExam` is the snapshot kept in browser history (for Back/Forward/refresh),
+  // so it can be stale. Load the current exam from the server; until then show
+  // the snapshot. Settings are rendered from the fresh copy only, so saving can
+  // never write old values back.
+  const [exam, setExam] = useState<any>(navExam);
+  const [examLoaded, setExamLoaded] = useState(false);
+  const [status, setStatus] = useState<string>(navExam.status);
   const [sessions, setSessions] = useState<any[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [violations, setViolations] = useState<any[]>([]);
@@ -139,7 +145,24 @@ export function SessionsPanel({ exam }: { exam: any }) {
   const [error, setError] = useState('');
 
   // Kept in sync with the settings panel so the warning badges use the live max.
-  const [max, setMax] = useState<number>(exam.maxWarnings ?? 3);
+  const [max, setMax] = useState<number>(navExam.maxWarnings ?? 3);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getExam(navExam.id)
+      .then((fresh) => {
+        if (cancelled) return;
+        setExam(fresh);
+        setStatus(fresh.status);
+        setMax(fresh.maxWarnings ?? 3);
+        setExamLoaded(true);
+      })
+      .catch((e) => !cancelled && setError(e.message));
+    return () => {
+      cancelled = true;
+    };
+  }, [navExam.id]);
 
   // The poll reads the currently expanded session through a ref so refreshing
   // the open event log never forces the 5s timer to restart on every expand.
@@ -295,7 +318,15 @@ export function SessionsPanel({ exam }: { exam: any }) {
 
       {/* Advanced settings (collapsed by default) */}
       <div className="mb-4">
-        <ExamSettings exam={exam} onSaved={(u) => setMax(u.maxWarnings)} />
+        {examLoaded && (
+          <ExamSettings
+            exam={exam}
+            onSaved={(u) => {
+              setExam((prev: any) => ({ ...prev, ...u }));
+              setMax(u.maxWarnings);
+            }}
+          />
+        )}
       </div>
 
       {error && <p className="text-sm text-red-600 dark:text-red-400 mb-3">{error}</p>}

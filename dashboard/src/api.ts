@@ -71,6 +71,7 @@ export const api = {
   updateExam: (id: string, patch: Record<string, unknown>) =>
     req(`/exams/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   deleteExam: (id: string) => req(`/exams/${id}`, { method: 'DELETE' }),
+  getExam: (id: string) => req(`/exams/${id}`),
   examSessions: (id: string) => req(`/exams/${id}/sessions`),
   exportExamCsv: (id: string) => reqBlob(`/exams/${id}/export`),
 
