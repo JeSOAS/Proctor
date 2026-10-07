@@ -164,15 +164,36 @@ export function AttentionBadges({
   reconnects,
   tamper,
   unaccountedSec,
+  idConflict,
+  nameMismatch,
+  noSession,
 }: {
   idle?: boolean;
   reconnects?: number;
   tamper?: boolean;
   unaccountedSec?: number;
+  idConflict?: boolean;
+  nameMismatch?: boolean;
+  noSession?: boolean;
 }) {
   const pill = 'inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full';
   return (
     <>
+      {noSession && (
+        <span className={`${pill} bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-200`}>
+          🪪 Submitted, but no Proctor session with this ID
+        </span>
+      )}
+      {idConflict && (
+        <span className={`${pill} bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-200`}>
+          🪪 ID also used by someone else
+        </span>
+      )}
+      {nameMismatch && (
+        <span className={`${pill} bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300`}>
+          ✏️ Different name on re-join
+        </span>
+      )}
       {tamper && (
         <span className={`${pill} bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-200`}>
           🛠 Opened extension settings
@@ -214,6 +235,8 @@ const EVENT_LABELS: Record<string, string> = {
   EXAM_STARTED: 'Opened the exam',
   EXAM_SUBMITTED: 'Submitted the exam',
   SUBMISSION_CONFIRMED: 'Submission confirmed (form)',
+  ID_CONFLICT: 'Someone else tried to join with this ID',
+  NAME_MISMATCH: 'Re-joined with a different name',
 };
 export function eventLabel(type: string): string {
   return EVENT_LABELS[type] || type;
@@ -238,6 +261,9 @@ const EVENT_HELP: Record<string, string> = {
   EXAM_STARTED: 'The student opened the exam page.',
   EXAM_SUBMITTED: 'The student submitted the exam (detected by the extension).',
   SUBMISSION_CONFIRMED: 'The exam platform confirmed this submission (authoritative).',
+  ID_CONFLICT:
+    'While this student was online, another join attempt used the same student ID with a different name or browser. It was refused.',
+  NAME_MISMATCH: 'This ID was used to re-join under a different name. The original name was kept.',
 };
 export function eventHelp(type: string): string {
   return EVENT_HELP[type] || 'Recorded activity.';
@@ -274,6 +300,8 @@ export function endedReasonLabel(reason?: string): string {
       return 'Reached warning limit';
     case 'TIMEOUT':
       return 'Disconnected (unexpected)';
+    case 'NO_SESSION':
+      return 'Form submitted, never joined Proctor';
     default:
       return 'Ended';
   }

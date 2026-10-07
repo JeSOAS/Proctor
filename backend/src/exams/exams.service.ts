@@ -34,6 +34,18 @@ const MAINTENANCE_THROTTLE_MS = 15_000;
 // runs the same expiry sweep, so exams close within this much of endsAt.
 const EXPIRY_SWEEP_MS = 30_000;
 
+// A session counts as "live" (someone is in it right now) if it heartbeated this
+// recently — the same 90 s after which it is treated as disconnected.
+const LIVE_SESSION_MS = 90_000;
+
+// endedReason of a row created by the form webhook for a submission whose
+// student ID matches no session (see webhooks.service). Not a real join.
+export const NO_SESSION = 'NO_SESSION';
+const NOT_PLACEHOLDER = { OR: [{ endedReason: null }, { endedReason: { not: NO_SESSION } }] };
+
+// Names are compared loosely (case, spacing) so "john  smith" == "John Smith".
+const sameName = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
+
 // Ownership is enforced through the chain Exam -> Course -> Teacher: every query
 // filters by the teacher, so a teacher can only ever touch their own exams.
 @Injectable()
@@ -112,7 +124,7 @@ export class ExamsService implements OnModuleInit, OnModuleDestroy {
       where: { course: { teacherId } },
       orderBy: { createdAt: 'desc' },
       include: {
-        _count: { select: { sessions: true } },
+        _count: { select: { sessions: { where: NOT_PLACEHOLDER } } },
         course: { select: { id: true, name: true, year: true, section: true } },
       },
     });
@@ -124,7 +136,7 @@ export class ExamsService implements OnModuleInit, OnModuleDestroy {
     const exam = await this.prisma.exam.findFirst({
       where: { id, course: { teacherId } },
       include: {
-        _count: { select: { sessions: true } },
+        _count: { select: { sessions: { where: NOT_PLACEHOLDER } } },
         course: { select: { id: true, name: true, year: true, section: true } },
       },
     });
@@ -181,6 +193,9 @@ export class ExamsService implements OnModuleInit, OnModuleDestroy {
         frequentReconnect: r.reconnectCount > 2,
         tamperIntent: r.tamperIntent,
         unaccountedSec: r.unaccountedSec,
+        idConflict: (bySession.get(s.id) ?? []).some((e) => e.type === 'ID_CONFLICT'),
+        nameMismatch: (bySession.get(s.id) ?? []).some((e) => e.type === 'NAME_MISMATCH'),
+        submittedWithoutJoining: s.endedReason === NO_SESSION,
       };
     });
   }
@@ -342,6 +357,31 @@ export class ExamsService implements OnModuleInit, OnModuleDestroy {
     let session;
     if (existing) {
       const wasEnded = existing.status === 'ENDED';
+      // A row the webhook created for a submission without a session: the real
+      // student has now joined, so it simply becomes theirs.
+      const placeholder = existing.endedReason === NO_SESSION;
+      const nameDiffers = !placeholder && sameName(existing.studentName) !== sameName(studentName);
+
+      // The student ID is typed, not verified. If it belongs to a session that is
+      // live right now and the joiner looks like someone else (different name or
+      // browser), refuse instead of merging two students into one record, and
+      // leave a trace on the existing session for the instructor.
+      const live =
+        existing.status === 'ACTIVE' && now.getTime() - existing.lastSeenAt.getTime() < LIVE_SESSION_MS;
+      if (live && (nameDiffers || (existing.userAgent && userAgent && existing.userAgent !== userAgent))) {
+        await this.prisma.violation.create({
+          data: {
+            sessionId: existing.id,
+            type: 'ID_CONFLICT',
+            payload: JSON.stringify({ attemptedName: studentName }),
+            occurredAt: now,
+          },
+        });
+        throw new ConflictException(
+          'This student ID is already being used in this exam. Check your student ID, or ask your instructor.',
+        );
+      }
+
       session = await this.prisma.studentSession.update({
         where: { id: existing.id },
         data: {
@@ -350,14 +390,26 @@ export class ExamsService implements OnModuleInit, OnModuleDestroy {
           disconnectedAt: null,
           endedAt: null,
           endedReason: null,
-          studentName,
+          // Keep the name from the first join (a different one is flagged below);
+          // only a webhook placeholder row takes the newly typed name.
+          studentName: placeholder ? studentName : existing.studentName,
           studentId: studentId ?? existing.studentId,
           userAgent,
         },
       });
+      if (nameDiffers) {
+        await this.prisma.violation.create({
+          data: {
+            sessionId: existing.id,
+            type: 'NAME_MISMATCH',
+            payload: JSON.stringify({ typedName: studentName }),
+            occurredAt: now,
+          },
+        });
+      }
       // Record the re-join in the timeline so the reopened session still shows
       // that the student left and came back.
-      if (wasEnded) {
+      if (wasEnded && !placeholder) {
         await this.prisma.violation.create({
           data: { sessionId: existing.id, type: 'REJOIN', occurredAt: now },
         });

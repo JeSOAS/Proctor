@@ -96,6 +96,12 @@ function buildLogRows(violations: any[]): LogRow[] {
       case 'REJOIN':
         push(v, v.url || '', 'exam');
         break;
+      case 'ID_CONFLICT':
+        push(v, `name entered: "${v.payload?.attemptedName ?? '?'}"`, 'plain');
+        break;
+      case 'NAME_MISMATCH':
+        push(v, `name entered: "${v.payload?.typedName ?? '?'}"`, 'plain');
+        break;
       case 'LONG_DISCONNECT':
       case 'RECONNECT':
         push(v, v.payload?.seconds != null ? `offline ${fmtGap(v.payload.seconds)}` : '', 'plain');
@@ -273,7 +279,7 @@ export function SessionsPanel({ exam }: { exam: any }) {
         <div>Type: <span className="text-gray-700 dark:text-gray-300">{scheduled ? 'Scheduled' : 'Manual'}</span></div>
         <div>
           Students: <span className="text-gray-700 dark:text-gray-300">
-            {sessions.length} joined{typeof exam.expectedStudents === 'number' ? ` / ${exam.expectedStudents} expected` : ''}
+            {sessions.filter((s) => !s.submittedWithoutJoining).length} joined{typeof exam.expectedStudents === 'number' ? ` / ${exam.expectedStudents} expected` : ''}
           </span>
         </div>
         <div>Max warnings: <span className="text-gray-700 dark:text-gray-300">{max}</span></div>
@@ -331,6 +337,9 @@ export function SessionsPanel({ exam }: { exam: any }) {
                     reconnects={s.reconnectCount}
                     tamper={s.tamperIntent}
                     unaccountedSec={s.unaccountedSec}
+                    idConflict={s.idConflict}
+                    nameMismatch={s.nameMismatch}
+                    noSession={s.submittedWithoutJoining}
                   />
                 </div>
                 <div className="text-xs text-gray-500 dark:text-gray-400">

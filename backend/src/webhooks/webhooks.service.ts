@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NO_SESSION } from '../exams/exams.service';
 
 // Compare student ids by digits only, so "u6530338", "6530338", and any stray
 // formatting all correlate (the AU email is u<id>@au.edu).
@@ -68,8 +69,23 @@ export class WebhooksService {
       where: { examId: exam.id },
       select: { id: true, studentId: true },
     });
-    const session = sessions.find((s) => digitsOnly(s.studentId) === student);
-    if (!session) return { matched: false, reason: 'no session for this student in the exam' };
+    let session = sessions.find((s) => digitsOnly(s.studentId) === student);
+    if (!session) {
+      // The form's verified email has an ID no Proctor session uses: either the
+      // student never joined, or joined under a wrong/someone else's ID. Record
+      // it as its own row so the instructor sees it instead of it vanishing.
+      session = await this.prisma.studentSession.create({
+        data: {
+          examId: exam.id,
+          studentName: 'Submitted without joining Proctor',
+          studentId: student,
+          status: 'ENDED',
+          endedReason: NO_SESSION,
+          endedAt: new Date(),
+        },
+        select: { id: true, studentId: true },
+      });
+    }
 
     await this.prisma.violation.create({
       data: {
@@ -81,6 +97,6 @@ export class WebhooksService {
         occurredAt: input.submittedAt ? new Date(input.submittedAt) : new Date(),
       },
     });
-    return { matched: true, sessionId: session.id };
+    return { matched: true, sessionId: session.id, joined: sessions.some((s) => s.id === session.id) };
   }
 }
