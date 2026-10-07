@@ -247,15 +247,17 @@ export function SessionsPanel({ exam: navExam }: { exam: any }) {
     }
   }
 
-  // Downloads the whole exam (sessions + counts) as CSV. The endpoint needs the
-  // Bearer token, so a plain <a href> won't do — fetch as a Blob and save it.
-  async function exportCsv() {
+  // Downloads the exam as CSV: "summary" = one row per student, "log" = every
+  // event. The endpoint needs the Bearer token, so a plain <a href> won't do —
+  // fetch as a Blob and save it.
+  async function exportCsv(view: 'summary' | 'log') {
     try {
-      const blob = await api.exportExamCsv(exam.id);
+      const blob = await api.exportExamCsv(exam.id, view);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${(exam.title || 'exam').replace(/[\\/:*?"<>|]/g, '_')}.csv`;
+      const base = (exam.title || 'exam').replace(/[\\/:*?"<>|]/g, '_');
+      a.download = `${base} - ${view === 'summary' ? 'summary' : 'full log'}.csv`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -336,8 +338,11 @@ export function SessionsPanel({ exam: navExam }: { exam: any }) {
         <button onClick={load} className={btn.neutral}>
           Refresh
         </button>
-        <button onClick={exportCsv} className={btn.neutral} disabled={sessions.length === 0}>
-          Export CSV
+        <button onClick={() => exportCsv('summary')} className={btn.neutral} disabled={sessions.length === 0}>
+          Export summary (CSV)
+        </button>
+        <button onClick={() => exportCsv('log')} className={btn.neutral} disabled={sessions.length === 0}>
+          Export full log (CSV)
         </button>
         <span className="text-xs text-gray-400 dark:text-gray-500 inline-flex items-center gap-1">
           Live — refreshes every 5s

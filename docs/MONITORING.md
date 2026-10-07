@@ -98,9 +98,16 @@ Non-counting attention flags shown alongside:
   (`NAME_MISMATCH`).
 - **🪪 Submitted, but no Proctor session with this ID** — a `NO_SESSION` row.
 
-**CSV export:** the exam page's *Export CSV* button (`GET /exams/:id/export`)
-downloads one row per event with the student, session status and end reason,
-and a `counts_as_violation` column computed by the same classifier.
+**CSV export** (`GET /exams/:id/export?view=summary|log&tz=<IANA zone>`), two
+buttons on the exam page, worded like the dashboard and timed in the teacher's
+time zone (UTF-8 with BOM so Excel shows non-Latin names):
+- *Export summary* — one row per student: joined/ended, how it ended,
+  violations vs the limit, assessment, submission, flags.
+- *Export full log* — one row per event, framed by "Joined" / "Ended" rows, with
+  window blur + focus merged into "Away from Chrome for …", and "Counts as
+  violation" (Yes / No / No (after submitting)).
+Labels live in `backend/src/exams/csv-export.ts`, copied from the dashboard's
+`ui.tsx` — keep the two in sync.
 
 ## 6. Enforcement & student-facing
 

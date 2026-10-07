@@ -104,8 +104,10 @@ State these plainly so results aren't misread:
 ## 10. Added after the 17 Sep trial
 
 - [ ] Open `https://<host>/` → redirected to `/dashboard/`.
-- [ ] Exam page → **Export CSV** → a `<exam title>.csv` downloads; it opens in a spreadsheet with one row per event and a `counts_as_violation` column matching the dashboard.
-- [ ] Export CSV is disabled while no student has joined.
+- [ ] Exam page → **Export summary (CSV)** → `<exam title> - summary.csv`: one row per student; violations, assessment and flags match the dashboard; times are local.
+- [ ] **Export full log (CSV)** → one row per event with the same wording as the student's log on screen ("Away from Chrome for …", "Opened the exam"…), in time order, framed by Joined / Ended rows.
+- [ ] Non-Latin (e.g. Thai) names display correctly when the CSV is opened in Excel.
+- [ ] Both export buttons are disabled while no student has joined.
 - [ ] Scheduled exam: leave the dashboard **closed** past the end time → within ~30 s the exam is CLOSED and running sessions show "Exam ended".
 - [ ] Exam with no end time, reopened after being closed → stays open (does not close again straight away).
 - [ ] Right after joining, open the Chrome Web Store → **not** counted as a violation.

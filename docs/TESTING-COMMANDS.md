@@ -41,7 +41,8 @@ curl $BASE/courses -H "$AUTH"
 curl -X POST $BASE/exams -H "Content-Type: application/json" -H "$AUTH" -d '{"courseId":"<COURSE_ID>","title":"Midterm"}'
 curl $BASE/exams -H "$AUTH"
 curl $BASE/exams/<EXAM_ID>/sessions -H "$AUTH"
-curl $BASE/exams/<EXAM_ID>/export -H "$AUTH" -o exam.csv          # CSV export
+curl "$BASE/exams/<EXAM_ID>/export?view=summary&tz=Asia/Bangkok" -H "$AUTH" -o summary.csv   # one row per student
+curl "$BASE/exams/<EXAM_ID>/export?view=log&tz=Asia/Bangkok" -H "$AUTH" -o log.csv           # every event
 curl -X POST $BASE/exams/<EXAM_ID>/status -H "Content-Type: application/json" -H "$AUTH" -d '{"status":"CLOSED"}'
 curl -X DELETE $BASE/exams/<EXAM_ID> -H "$AUTH"
 

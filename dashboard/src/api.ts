@@ -73,7 +73,11 @@ export const api = {
   deleteExam: (id: string) => req(`/exams/${id}`, { method: 'DELETE' }),
   getExam: (id: string) => req(`/exams/${id}`),
   examSessions: (id: string) => req(`/exams/${id}/sessions`),
-  exportExamCsv: (id: string) => reqBlob(`/exams/${id}/export`),
+  // Times in the CSV are written in the teacher's own time zone.
+  exportExamCsv: (id: string, view: 'summary' | 'log') =>
+    reqBlob(
+      `/exams/${id}/export?view=${view}&tz=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`,
+    ),
 
   sessionViolations: (id: string) => req(`/sessions/${id}/violations`),
   deleteSession: (id: string) => req(`/sessions/${id}`, { method: 'DELETE' }),

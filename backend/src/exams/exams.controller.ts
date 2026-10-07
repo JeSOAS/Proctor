@@ -6,6 +6,7 @@ import {
   Header,
   Headers,
   Param,
+  Query,
   Patch,
   Post,
   Res,
@@ -53,10 +54,16 @@ export class ExamsController {
   async export(
     @CurrentTeacher() teacher: CurrentTeacherData,
     @Param('id') id: string,
+    @Query('view') view: string | undefined,
+    @Query('tz') tz: string | undefined,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const csv = await this.examsService.exportCsv(teacher.id, id);
-    res.set('Content-Disposition', `attachment; filename="exam-${id}.csv"`);
+    const { filename, csv } = await this.examsService.exportCsv(teacher.id, id, view === 'summary' ? 'summary' : 'log', tz);
+    // RFC 5987 so non-ASCII exam titles survive; plain fallback for old clients.
+    res.set(
+      'Content-Disposition',
+      `attachment; filename="${filename.replace(/[^ -~]/g, '_')}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+    );
     return csv;
   }
 

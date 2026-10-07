@@ -10,6 +10,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { classify } from '../common/concerning';
+import { buildLogCsv, buildSummaryCsv } from './csv-export';
 
 // Join-code alphabet: no 0/O/1/I/L to avoid students mistyping the code.
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -201,39 +202,23 @@ export class ExamsService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /// CSV export of an exam: one row per violation event (with its session
-  /// context), plus a row for sessions that recorded no events. Reuses the
-  /// classifier so the "counts as violation" column matches the dashboard.
-  async exportCsv(teacherId: string, examId: string): Promise<string> {
+  /// CSV exports, formatted like the dashboard (see csv-export.ts):
+  ///   view "summary" — one row per student with counts, assessment and flags;
+  ///   view "log"     — every event as a readable row, framed by joined/ended.
+  /// Times are written in the teacher's time zone (`tz`, from the browser).
+  async exportCsv(teacherId: string, examId: string, view: string, tz?: string) {
     const exam = await this.getExam(teacherId, examId); // ownership check
+    const base = (exam.title || 'exam').replace(/[\\/:*?"<>|]/g, '_');
+    if (view === 'summary') {
+      const rows = await this.listExamSessions(teacherId, examId);
+      return { filename: `${base} - summary.csv`, csv: buildSummaryCsv(rows, exam.maxWarnings, tz) };
+    }
     const sessions = await this.prisma.studentSession.findMany({
       where: { examId },
       orderBy: { startedAt: 'asc' },
       include: { violations: { orderBy: { occurredAt: 'asc' } } },
     });
-    const esc = (v: unknown) => {
-      const s = v == null ? '' : String(v);
-      return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-    };
-    const iso = (d?: Date | null) => (d ? d.toISOString() : '');
-    // Cells may be null (optional student ID / URL / end reason); esc() renders those as ''.
-    const rows: unknown[][] = [[
-      'student_name', 'student_id', 'session_status', 'ended_reason',
-      'joined_at', 'ended_at', 'event_type', 'event_url',
-      'counts_as_violation', 'occurred_at',
-    ]];
-    for (const s of sessions) {
-      const r = classify(s.violations, { examLink: exam.examLink });
-      const base = [s.studentName, s.studentId, s.status, s.endedReason, iso(s.startedAt), iso(s.endedAt)];
-      if (!s.violations.length) {
-        rows.push([...base, '', '', '', '']);
-        continue;
-      }
-      for (const v of s.violations) {
-        rows.push([...base, v.type, v.url, r.concerning.has(v.id) ? 'yes' : 'no', iso(v.occurredAt)]);
-      }
-    }
-    return rows.map((row) => row.map(esc).join(',')).join('\r\n');
+    return { filename: `${base} - full log.csv`, csv: buildLogCsv(sessions, exam.examLink, tz) };
   }
 
   async setStatus(teacherId: string, id: string, status: string) {

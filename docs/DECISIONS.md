@@ -178,8 +178,10 @@ own deployment (Cloudflare Pages) — the API is already CORS-open.
   (`ID_CONFLICT`); re-joins keep the first name (`NAME_MISMATCH` if different);
   confirmed form submissions with no matching session get their own
   `NO_SESSION` row. Backend-only, so the published extension did not change.
-- **CSV export** (`GET /exams/:id/export`, dashboard button) — one row per
-  event, with the classifier's "counts as violation".
+- **CSV export** (`GET /exams/:id/export`) — a per-student summary and a full
+  event log, worded like the dashboard and in the teacher's time zone. Generated
+  by the backend (single source of the violation rules), labels mirrored from
+  the dashboard.
 - **`/` redirects to `/dashboard/`** instead of returning 404.
 
 **Why:** each item came from the trial data or a real usage problem; all are
