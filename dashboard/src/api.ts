@@ -28,6 +28,24 @@ async function req(path: string, options: RequestInit = {}): Promise<any> {
   return data;
 }
 
+// Same auth/error handling as req(), but returns the raw body as a Blob — used
+// for file downloads (CSV export) where the response isn't JSON.
+async function reqBlob(path: string): Promise<Blob> {
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const res = await fetch(API_BASE + path, { headers });
+  if (res.status === 401) {
+    setToken(null);
+    throw new Error('Session expired — please log in again.');
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.message || `Request failed (${res.status})`);
+  }
+  return res.blob();
+}
+
 export const api = {
   login: (email: string, password: string) =>
     req('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
@@ -54,6 +72,7 @@ export const api = {
     req(`/exams/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   deleteExam: (id: string) => req(`/exams/${id}`, { method: 'DELETE' }),
   examSessions: (id: string) => req(`/exams/${id}/sessions`),
+  exportExamCsv: (id: string) => reqBlob(`/exams/${id}/export`),
 
   sessionViolations: (id: string) => req(`/sessions/${id}/violations`),
   deleteSession: (id: string) => req(`/sessions/${id}`, { method: 'DELETE' }),

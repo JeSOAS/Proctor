@@ -218,6 +218,24 @@ export function SessionsPanel({ exam }: { exam: any }) {
     }
   }
 
+  // Downloads the whole exam (sessions + counts) as CSV. The endpoint needs the
+  // Bearer token, so a plain <a href> won't do — fetch as a Blob and save it.
+  async function exportCsv() {
+    try {
+      const blob = await api.exportExamCsv(exam.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${(exam.title || 'exam').replace(/[\\/:*?"<>|]/g, '_')}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+
   const filtered = sessions.filter((s) =>
     `${s.studentName} ${s.studentId || ''}`.toLowerCase().includes(q.toLowerCase()),
   );
@@ -280,6 +298,9 @@ export function SessionsPanel({ exam }: { exam: any }) {
       <div className="flex items-center gap-3 mb-2">
         <button onClick={load} className={btn.neutral}>
           Refresh
+        </button>
+        <button onClick={exportCsv} className={btn.neutral} disabled={sessions.length === 0}>
+          Export CSV
         </button>
         <span className="text-xs text-gray-400 dark:text-gray-500 inline-flex items-center gap-1">
           Live — refreshes every 5s
