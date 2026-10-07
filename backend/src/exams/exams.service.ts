@@ -15,7 +15,8 @@ import { classify } from '../common/concerning';
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const CODE_LENGTH = 6;
 
-// Safeguard: an OPEN exam with no end time that has been open longer than this
+// Safeguard: an OPEN exam with no end time that has been open (since it was
+// opened or last reopened) longer than this
 // is auto-closed, so a forgotten exam can't stay open indefinitely.
 const MAX_EXAM_OPEN_HOURS = 24;
 
@@ -244,7 +245,9 @@ export class ExamsService implements OnModuleInit, OnModuleDestroy {
     const data: { status: string; openedAt?: Date; closedAt?: Date | null } = { status };
     if (status === 'OPEN') {
       data.closedAt = null; // reopened
-      if (!exam.openedAt) data.openedAt = new Date();
+      // Reopening an exam with no end time starts a fresh open period, so the
+      // 24 h safeguard (counted from openedAt) doesn't close it again at once.
+      if (!exam.openedAt || (exam.status === 'CLOSED' && !exam.endsAt)) data.openedAt = new Date();
     }
     if (status === 'CLOSED') data.closedAt = new Date();
     const updated = await this.prisma.exam.update({ where: { id }, data });
@@ -453,11 +456,12 @@ export class ExamsService implements OnModuleInit, OnModuleDestroy {
         OR: [
           // its end time has passed
           { endsAt: { lt: now } },
-          // no end time, no scheduled start, created > safeguard window ago
-          { endsAt: null, startsAt: null, createdAt: { lt: safeguardCutoff } },
-          // no end time, started > safeguard window ago (future-scheduled exams
-          // are left alone until they actually start)
-          { endsAt: null, startsAt: { lt: safeguardCutoff } },
+          // no end time, opened (or reopened) > safeguard window ago
+          { endsAt: null, openedAt: { lt: safeguardCutoff } },
+          // never opened yet: fall back to the scheduled start, else creation
+          // (future-scheduled exams are left alone until they actually start)
+          { endsAt: null, openedAt: null, startsAt: { lt: safeguardCutoff } },
+          { endsAt: null, openedAt: null, startsAt: null, createdAt: { lt: safeguardCutoff } },
         ],
       },
       data: { status: 'CLOSED', closedAt: now },
