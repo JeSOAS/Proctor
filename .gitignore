@@ -11,3 +11,6 @@ backend/logs.json
 
 # Docker volumes (shouldn't be committed)
 docker/data/
+
+# Packaged extension builds (uploaded to the Chrome Web Store, not source)
+*.zip
