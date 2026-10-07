@@ -41,11 +41,14 @@ curl $BASE/courses -H "$AUTH"
 curl -X POST $BASE/exams -H "Content-Type: application/json" -H "$AUTH" -d '{"courseId":"<COURSE_ID>","title":"Midterm"}'
 curl $BASE/exams -H "$AUTH"
 curl $BASE/exams/<EXAM_ID>/sessions -H "$AUTH"
+curl $BASE/exams/<EXAM_ID>/export -H "$AUTH" -o exam.csv          # CSV export
 curl -X POST $BASE/exams/<EXAM_ID>/status -H "Content-Type: application/json" -H "$AUTH" -d '{"status":"CLOSED"}'
 curl -X DELETE $BASE/exams/<EXAM_ID> -H "$AUTH"
 
 # --- student joins (open, no token) ---
 curl -X POST $BASE/exams/<CODE>/register -H "Content-Type: application/json" -d '{"studentName":"Alice","studentId":"6530001"}'
+# same ID, different name, while Alice is online -> 409 "already being used"
+curl -X POST $BASE/exams/<CODE>/register -H "Content-Type: application/json" -d '{"studentName":"Bob","studentId":"6530001"}'
 
 # --- sessions ---
 curl $BASE/sessions/<SESSION_ID> -H "$AUTH"                      # read (teacher)
@@ -56,6 +59,8 @@ curl -X POST $BASE/sessions/<SESSION_ID>/end                     # student leave
 
 # --- checks & reset ---
 curl -s -o /dev/null -w "%{http_code}\n" -X POST $BASE/exams -H "Content-Type: application/json" -d '{"title":"no token"}'   # 401
+curl -s -o /dev/null -w "%{http_code} %{redirect_url}
+" $BASE/   # 302 -> /dashboard/
 curl -X DELETE $BASE/exams -H "x-admin-token: $ADMIN"            # wipe all (admin)
 ```
 

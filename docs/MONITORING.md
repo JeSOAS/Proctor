@@ -49,18 +49,34 @@ doesn't false-positive. Entries are `host` (any path) or `host/path` (that
 prefix only, e.g. `docs.google.com/forms` allows Forms but **not** Docs/Sheets).
 The exam's own link is auto-whitelisted, scoped to its path. `ai-domains.txt`
 lists AI tools (host-only). Both are plain text, loaded at startup — edit and
-restart to apply.
+restart to apply. `chromewebstore.google.com` is listed because students open
+the store to install or check the extension right after joining.
 
 ## 4. Session & exam lifecycle
 
 - **Session states:** `ACTIVE` → (no heartbeat 90 s) → `DISCONNECTED` →
   (resumes within 10 min) back to `ACTIVE` with a gap event, or → `ENDED`.
-- **End reasons:** `LEFT` (pressed Leave), `TIMEOUT` (disconnected too long),
-  `EXAM_CLOSED` (teacher closed the exam), `AUTO_CLOSED` (hit the warning limit).
+- **End reasons:** `LEFT` (pressed Leave), `FINISHED_FULLSCREEN` (pressed Finish
+  in the fullscreen prompt), `TIMEOUT` (disconnected too long), `EXAM_CLOSED`
+  (the exam closed), `AUTO_CLOSED` (hit the warning limit), `NO_SESSION` (a row
+  created by the form webhook — see below).
 - **Re-join:** re-registering reuses the student's existing session for that
   exam (matched by student ID, else name) and logs `REJOIN` — one row per
-  student, no fragmentation.
+  student, no fragmentation. The name from the first join is kept; re-joining
+  under a different name logs `NAME_MISMATCH`.
+- **Duplicate student IDs:** a join with a student ID whose session is online
+  right now (heartbeat < 90 s) from a different name or browser is refused
+  (409, "This student ID is already being used in this exam…") and logged on
+  the existing session as `ID_CONFLICT` with the name that was entered.
+- **Submissions without a session:** when the form webhook confirms a
+  submission whose student ID has no session in that exam, a row with end
+  reason `NO_SESSION` is created so it appears on the dashboard and in the CSV.
+  If the student joins later with that ID, the row becomes their session. These
+  rows are not counted as joined.
 - **Closing an exam** ends its still-running sessions so tabs stop logging.
+- **Automatic closing:** a server timer (every 30 s) closes exams whose end
+  time has passed, so they close on time even with no dashboard open. An open
+  exam with **no** end time is closed 24 h after it was opened or last reopened.
 
 ## 5. Dashboard flags (per session)
 
@@ -76,6 +92,15 @@ Non-counting attention flags shown alongside:
   unmonitored"); ≥ 60 s. This is the honest coverage signal, not an accusation.
 - **🛠 Opened extension settings** — navigated to `chrome://extensions` during
   the exam (tampering intent, caught while the extension is still running).
+- **🪪 ID also used by someone else** — a join with this student ID was refused
+  while this student was online (`ID_CONFLICT`; the log shows the name entered).
+- **✏️ Different name on re-join** — this ID re-joined under another name
+  (`NAME_MISMATCH`).
+- **🪪 Submitted, but no Proctor session with this ID** — a `NO_SESSION` row.
+
+**CSV export:** the exam page's *Export CSV* button (`GET /exams/:id/export`)
+downloads one row per event with the student, session status and end reason,
+and a `counts_as_violation` column computed by the same classifier.
 
 ## 6. Enforcement & student-facing
 
@@ -104,6 +129,10 @@ Non-counting attention flags shown alongside:
 - Per-exam settings (dashboard): max warnings, disconnect grace, notify,
   auto-close, exam link, expected students, start/end times.
 - Rate limit: `THROTTLE_LIMIT`, `THROTTLE_TTL_MS`.
+- Exam expiry (`backend/src/exams/exams.service.ts`): `EXPIRY_SWEEP_MS` (30 s
+  timer), `MAX_EXAM_OPEN_HOURS` (24 h for exams without an end time),
+  `LIVE_SESSION_MS` (90 s — how recent a heartbeat must be for an ID to count as
+  in use).
 
 ## 9. Known limitations (by design / inherent)
 

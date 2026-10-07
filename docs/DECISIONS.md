@@ -165,17 +165,35 @@ there are no deep-link routes to configure.
 **Next:** if the dashboard grows, add client-side routing and split it into its
 own deployment (Cloudflare Pages) — the API is already CORS-open.
 
+## 12. Changes from the 17 Sep 2026 trial (and CSV export)
+
+- **Exams close on time.** Expiry used to run only when the dashboard read data,
+  so an exam ending 10:00 closed at 11:16 and students stayed monitored. A 30 s
+  server timer now runs the same sweep. Exams without an end time close 24 h
+  after they were opened *or last reopened* (reopening restarts the period).
+- **Chrome Web Store allowed.** 17 trial violations were students opening the
+  store to install/check the extension right after joining.
+- **Duplicate student IDs.** A join with an ID that is in use by an online
+  session (different name or browser) is refused with 409 and logged
+  (`ID_CONFLICT`); re-joins keep the first name (`NAME_MISMATCH` if different);
+  confirmed form submissions with no matching session get their own
+  `NO_SESSION` row. Backend-only, so the published extension did not change.
+- **CSV export** (`GET /exams/:id/export`, dashboard button) — one row per
+  event, with the classifier's "counts as violation".
+- **`/` redirects to `/dashboard/`** instead of returning 404.
+
+**Why:** each item came from the trial data or a real usage problem; all are
+backend/dashboard changes, avoiding another Chrome Web Store review.
+
 ## Deliberately left for the next team
 
 None of these are bugs — they are scoped-out on purpose for SP2:
 
 - **Real-time updates** (Socket.IO) — the dashboard polls (5s) for now.
-- **Auto-submit on violation threshold** + in-browser warnings — `maxWarnings`
-  is stored but not yet enforced.
-- **Restricted-site detection** — URLs are captured (`TAB_SWITCH`/`TAB_NAVIGATE`)
-  but not matched against a blocklist yet.
-- **Offline event buffering + `DISCONNECTED` status** — events during a network
-  outage are currently dropped; see the backend README "unstable internet" note.
-- **Google/MS Forms auto-submit, Telegram alerts** — in the deck, not implemented.
-- **Student rate-limiting / anti-abuse** — anyone with a join code can currently
-  post events; a real deployment should bind a session to its device.
+- **Submission confirmation beyond Google Forms** — the webhook is generic, but
+  only the Google Forms Apps Script exists (Microsoft Forms would need a Power
+  Automate flow). Auto-*submitting* a student's form is intentionally not done.
+- **Telegram alerts** — in the deck, not implemented.
+- **Student rate-limiting / anti-abuse** — student endpoints are rate-limited
+  per IP; anyone with a join code can still post events; a real deployment
+  should bind a session to its device.

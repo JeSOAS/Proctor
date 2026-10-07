@@ -22,7 +22,7 @@ anything unexpected. **Observe results** in the dashboard (exam → click a stud
 - [ ] Join a **CLOSED** exam → refused.
 - [ ] (Scheduled exam) join **before** start time → "has not started yet".
 - [ ] (Scheduled exam) join **after** end time → refused.
-- [ ] Leave, then re-join → a new ACTIVE session; the old one shows ENDED.
+- [ ] Leave, then re-join → the same session becomes ACTIVE again with a "Re-joined" row (one row per student).
 - [ ] Two students type the **same name** → two separate sessions, both visible.
 - [ ] Join, then close the popup without leaving → still monitored.
 
@@ -58,14 +58,14 @@ anything unexpected. **Observe results** in the dashboard (exam → click a stud
 - [ ] Reload the exam page → still monitored (events after the reload still record).
 - [ ] Leave the browser idle ~2 min, then switch a tab → still recorded (the worker wakes).
 - [ ] Close the whole browser → session becomes ENDED within ~90 s in the dashboard.
-- [ ] ⚠ Laptop sleeps / lid closed, then wake → the session ENDs during sleep; after waking the student must **re-join** (the extension clears its stale session). Confirm this behavior.
+- [ ] Laptop sleeps / lid closed < 10 min, then wake → the session shows Disconnected, then resumes with an "offline" gap row (no re-join needed).
 - [ ] Disable the extension mid-exam → session ENDs (looks like leaving); re-enable + re-join to resume.
 - [ ] "Leave exam" in the popup → session ENDED; monitoring stops.
 - [ ] Teacher **closes the exam** mid-session → the student's next event/heartbeat is rejected; they stop being monitored and cannot re-join.
 
 ## 6. Network
 
-- [ ] ⚠ Turn WiFi off ~1 min, do some tab switches, turn WiFi back on → events **during the outage are lost** (no offline buffer yet); the session may briefly show ENDED and a new session appears on re-activity. Confirm the extent of the loss.
+- [ ] Turn WiFi off ~1 min, do some tab switches, turn WiFi back on → the switches made offline still appear (buffered and sent on reconnect), in the right order.
 - [ ] Brief blip (< 90 s) → heartbeat catches up; the session stays.
 
 ## 7. Multiple students / load
@@ -101,12 +101,22 @@ State these plainly so results aren't misread:
 - Anything **before joining** or **after leaving/closing** the exam.
 - Content-script events (clipboard) on **`chrome://` pages or the Web Store** — though tab switches to them are still seen.
 
-## Not built yet — do NOT expect these in the mock
+## 10. Added after the 17 Sep trial
 
-- **Warning pop-ups** to the student (Week 9) — students see no warnings.
-- **Auto-submit** on a violation threshold (Week 10) — `maxWarnings` is stored but not enforced; the exam will **not** auto-submit.
-- **Restricted-site blocklist** — URLs are captured but not matched against a banned list.
-- **Offline buffering / a DISCONNECTED status** — network drops lose events and can look like the student left.
+- [ ] Open `https://<host>/` → redirected to `/dashboard/`.
+- [ ] Exam page → **Export CSV** → a `<exam title>.csv` downloads; it opens in a spreadsheet with one row per event and a `counts_as_violation` column matching the dashboard.
+- [ ] Export CSV is disabled while no student has joined.
+- [ ] Scheduled exam: leave the dashboard **closed** past the end time → within ~30 s the exam is CLOSED and running sessions show "Exam ended".
+- [ ] Exam with no end time, reopened after being closed → stays open (does not close again straight away).
+- [ ] Right after joining, open the Chrome Web Store → **not** counted as a violation.
+- [ ] Student A joined and online; a second device joins with A's ID and a different name → refused ("This student ID is already being used…"); A shows "🪪 ID also used by someone else" and the log row has the name entered.
+- [ ] A leaves; the ID is used again with a different name → allowed; A's original name is kept and "✏️ Different name on re-join" appears.
+- [ ] (Webhook configured) a Google Form is submitted with a student ID that never joined → a "Submitted, but no Proctor session with this ID" row appears; it is not counted in "joined".
+
+## Not built — do NOT expect these in the mock
+
+- **Auto-submitting** the form on the warning limit — the session closes instead ("Reached warning limit").
+- **Submission confirmation for non-Google forms** — other platforms rely on Finish / Leave.
 
 ---
 
