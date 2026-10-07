@@ -25,19 +25,28 @@
 const BACKEND_URL = 'https://proctor.jesoas.org';
 const WEBHOOK_SECRET = 'PASTE_THE_SAME_SECRET_AS_THE_BACKEND';
 
-/** Run once (admin) to start the 10-minute auto-sync. Safe to re-run. */
+/** Run once (admin) to start the auto-sync. Safe to re-run. */
 function installAutoSync() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'syncForms') ScriptApp.deleteTrigger(t);
   });
-  ScriptApp.newTrigger('syncForms').timeBased().everyMinutes(10).create();
-  syncForms(); // run immediately too
+  // Every minute, but cheap: syncForms skips the Drive scan unless the exam list
+  // actually changed, so a newly created exam is picked up within ~1 minute.
+  ScriptApp.newTrigger('syncForms').timeBased().everyMinutes(1).create();
+  PropertiesService.getScriptProperties().deleteProperty('lastTokens'); // force a full first sync
+  syncForms();
 }
 
 /** Ask Proctor which forms to watch, then (un)install submit triggers to match. */
 function syncForms() {
   const wanted = fetchWatchedTokens();
   if (wanted === null) return; // backend unreachable — keep current triggers
+
+  // Cheap early-out: only do the (heavier) Drive scan when the set of watched
+  // forms has actually changed since the last run.
+  const key = Object.keys(wanted).sort().join(',');
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('lastTokens') === key) return;
 
   const existing = {}; // formId -> the onFormSubmit trigger
   ScriptApp.getProjectTriggers().forEach(function (t) {
@@ -67,6 +76,8 @@ function syncForms() {
   Object.keys(existing).forEach(function (id) {
     if (!keep[id]) ScriptApp.deleteTrigger(existing[id]);
   });
+
+  props.setProperty('lastTokens', key); // remember so unchanged runs stay cheap
 }
 
 /** Fired by the installed trigger on every submission of a watched form. */

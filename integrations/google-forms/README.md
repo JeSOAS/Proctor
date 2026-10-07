@@ -22,7 +22,8 @@ server, when a response is submitted — no heuristics, unspoofable.
    project** → paste `Code.gs`.
 3. Set `BACKEND_URL` and `WEBHOOK_SECRET` at the top (secret must match step 1).
 4. In the toolbar dropdown choose **`installAutoSync`**, click **Run**, and
-   authorize. Done — the script now re-syncs every 10 minutes.
+   authorize. Done — the script now re-syncs every minute (cheaply: it only
+   rescans when the exam list changes).
 
 ## Teacher, per exam — 2 pages only
 
@@ -31,7 +32,7 @@ server, when a response is submitted — no heuristics, unspoofable.
    ID"** question.
 2. **Proctor:** set that form's URL as the exam's **Exam link**.
 
-Within ~10 minutes the script auto-installs the submit trigger on the form and
+Within ~1 minute the script auto-installs the submit trigger on the form and
 starts confirming submissions. Nothing else to do — no per-form scripting.
 
 > How it stays in sync: the script asks the backend (`GET /webhooks/forms`)
