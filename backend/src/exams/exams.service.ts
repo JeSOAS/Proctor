@@ -177,7 +177,8 @@ export class ExamsService {
       return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
     };
     const iso = (d?: Date | null) => (d ? d.toISOString() : '');
-    const rows: string[][] = [[
+    // Cells may be null (optional student ID / URL / end reason); esc() renders those as ''.
+    const rows: unknown[][] = [[
       'student_name', 'student_id', 'session_status', 'ended_reason',
       'joined_at', 'ended_at', 'event_type', 'event_url',
       'counts_as_violation', 'occurred_at',
