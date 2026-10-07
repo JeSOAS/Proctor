@@ -162,6 +162,40 @@ export class ExamsService {
     });
   }
 
+  /// CSV export of an exam: one row per violation event (with its session
+  /// context), plus a row for sessions that recorded no events. Reuses the
+  /// classifier so the "counts as violation" column matches the dashboard.
+  async exportCsv(teacherId: string, examId: string): Promise<string> {
+    const exam = await this.getExam(teacherId, examId); // ownership check
+    const sessions = await this.prisma.studentSession.findMany({
+      where: { examId },
+      orderBy: { startedAt: 'asc' },
+      include: { violations: { orderBy: { occurredAt: 'asc' } } },
+    });
+    const esc = (v: unknown) => {
+      const s = v == null ? '' : String(v);
+      return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const iso = (d?: Date | null) => (d ? d.toISOString() : '');
+    const rows: string[][] = [[
+      'student_name', 'student_id', 'session_status', 'ended_reason',
+      'joined_at', 'ended_at', 'event_type', 'event_url',
+      'counts_as_violation', 'occurred_at',
+    ]];
+    for (const s of sessions) {
+      const r = classify(s.violations, { examLink: exam.examLink });
+      const base = [s.studentName, s.studentId, s.status, s.endedReason, iso(s.startedAt), iso(s.endedAt)];
+      if (!s.violations.length) {
+        rows.push([...base, '', '', '', '']);
+        continue;
+      }
+      for (const v of s.violations) {
+        rows.push([...base, v.type, v.url, r.concerning.has(v.id) ? 'yes' : 'no', iso(v.occurredAt)]);
+      }
+    }
+    return rows.map((row) => row.map(esc).join(',')).join('\r\n');
+  }
+
   async setStatus(teacherId: string, id: string, status: string) {
     const allowed = ['DRAFT', 'OPEN', 'CLOSED'];
     if (!allowed.includes(status)) {

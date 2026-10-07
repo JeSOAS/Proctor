@@ -3,12 +3,15 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   Headers,
   Param,
   Patch,
   Post,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { AdminGuard } from '../common/admin.guard';
 import { CurrentTeacher, CurrentTeacherData } from '../auth/current-teacher.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -42,6 +45,19 @@ export class ExamsController {
   @UseGuards(JwtAuthGuard)
   sessions(@CurrentTeacher() teacher: CurrentTeacherData, @Param('id') id: string) {
     return this.examsService.listExamSessions(teacher.id, id);
+  }
+
+  @Get(':id/export')
+  @UseGuards(JwtAuthGuard)
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  async export(
+    @CurrentTeacher() teacher: CurrentTeacherData,
+    @Param('id') id: string,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const csv = await this.examsService.exportCsv(teacher.id, id);
+    res.set('Content-Disposition', `attachment; filename="exam-${id}.csv"`);
+    return csv;
   }
 
   @Post(':id/status')
