@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api';
-import { HelpIcon, btn } from '../ui';
+import { HelpIcon, Req, RequiredLegend, btn, missingCls } from '../ui';
 
 const numInput =
   'w-20 px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100';
@@ -28,9 +28,14 @@ export function ExamSettings({
   const [savedMsg, setSavedMsg] = useState('');
   const [error, setError] = useState('');
 
+  const maxOk = Number(max) >= 1;
+  const linkOk = /^https?:\/\//i.test(examLink.trim());
+
   async function save() {
     setError('');
     setSavedMsg('');
+    if (!maxOk) return setError('Max warnings must be at least 1.');
+    if (!linkOk) return setError('Exam link is required (a full https:// address).');
     try {
       const updated = await api.updateExam(exam.id, {
         maxWarnings: max,
@@ -66,8 +71,8 @@ export function ExamSettings({
         <div className="px-4 py-3 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 space-y-3 text-sm">
           <div className="flex flex-wrap gap-x-6 gap-y-2">
             <label className="inline-flex items-center gap-2">
-              <span className="text-gray-600 dark:text-gray-300">Max warnings</span>
-              <input type="number" min={1} value={max} onChange={(e) => setMax(Number(e.target.value))} className={numInput} />
+              <span className="text-gray-600 dark:text-gray-300">Max warnings <Req /></span>
+              <input type="number" min={1} required value={max} onChange={(e) => setMax(Number(e.target.value))} className={numInput + missingCls(!maxOk)} />
             </label>
             <label className="inline-flex items-center gap-2">
               <span className="inline-flex items-center gap-1 text-gray-600 dark:text-gray-300">
@@ -94,14 +99,15 @@ export function ExamSettings({
 
           <label className="block">
             <span className="inline-flex items-center gap-1 text-gray-600 dark:text-gray-300">
-              Exam link (page students must open)
+              Exam link (page students must open) <Req />
               <HelpIcon text="The URL students must open for this exam. Auto-whitelisted; students whose session never visits this domain are flagged 'Did not open exam'." />
             </span>
             <input
               value={examLink}
               onChange={(e) => setExamLink(e.target.value)}
               placeholder="https://docs.google.com/forms/d/…"
-              className="block w-full mt-1 px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+              required
+              className={'block w-full mt-1 px-2 py-1 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100' + missingCls(!linkOk)}
             />
           </label>
 
@@ -123,6 +129,7 @@ export function ExamSettings({
           </div>
 
           {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+          <RequiredLegend />
 
           <div className="flex items-center gap-3">
             <button onClick={save} className={btn.primary}>

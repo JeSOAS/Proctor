@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { api } from '../api';
 import { HelpIcon, JoinCode, SearchBar, btn } from '../ui';
-import { RequiredInput, RequiredLegend } from '../ui';
+import { Req, RequiredInput, RequiredLegend, missingCls } from '../ui';
 import { ExamSettings } from './ExamSettings';
 
 const STATUS_STYLES: Record<string, string> = {
@@ -59,6 +59,8 @@ export function ExamsPanel({ course, onOpen }: { course: any; onOpen: (exam: any
     setError('');
     setTried(true);
     if (!title.trim()) return setError('Exam title is required.');
+    if (!(Number(maxWarnings) >= 1)) return setError('Max warnings must be at least 1.');
+    if (!/^https?:\/\//i.test(examLink.trim())) return setError('Exam link is required (a full https:// address).');
     try {
       await api.createExam({
         courseId: course.id,
@@ -113,8 +115,8 @@ export function ExamsPanel({ course, onOpen }: { course: any; onOpen: (exam: any
         <div className="flex flex-wrap gap-2">
           <RequiredInput value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Exam title" inputClassName={input} missing={tried && !title.trim()} className="flex-1 min-w-48" />
           <label className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
-            Max warnings
-            <input type="number" min={0} value={maxWarnings} onChange={(e) => setMaxWarnings(Number(e.target.value))} className={`w-16 ${input}`} />
+            <span>Max warnings <Req /></span>
+            <input type="number" min={1} required value={maxWarnings} onChange={(e) => setMaxWarnings(Number(e.target.value))} className={`w-16 ${input}${missingCls(tried && !(Number(maxWarnings) >= 1))}`} />
           </label>
           <label className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
             <span className="inline-flex items-center gap-1">
@@ -126,10 +128,10 @@ export function ExamsPanel({ course, onOpen }: { course: any; onOpen: (exam: any
         </div>
         <label className="block text-xs text-gray-500 dark:text-gray-400">
           <span className="inline-flex items-center gap-1">
-            Exam link (page students must open)
+            Exam link (page students must open) <Req />
             <HelpIcon text="The URL students must open for this exam (e.g. the Google Form). It's auto-whitelisted, and any student whose session never visits this domain is flagged 'Did not open exam'." />
           </span>
-          <input value={examLink} onChange={(e) => setExamLink(e.target.value)} placeholder="https://docs.google.com/forms/d/…" className={`block w-full mt-1 ${input}`} />
+          <input value={examLink} required onChange={(e) => setExamLink(e.target.value)} placeholder="https://docs.google.com/forms/d/…" className={`block w-full mt-1 ${input}${missingCls(tried && !/^https?:\/\//i.test(examLink.trim()))}`} />
         </label>
         <div className="flex flex-wrap gap-3 items-end">
           <label className="text-xs text-gray-500 dark:text-gray-400">

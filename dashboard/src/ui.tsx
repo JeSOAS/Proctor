@@ -388,8 +388,6 @@ export function RequiredInput({
 /// "* required" legend shown under forms that have required fields.
 export function RequiredLegend() {
   return (
-    <p className="text-xs text-gray-500 dark:text-gray-400">
-      <Req /> required
-    </p>
+    <p className="text-xs text-red-600 dark:text-red-400">* Indicates required field</p>
   );
 }

@@ -60,6 +60,9 @@ function olderThan(v: string, min: string): boolean {
 // The stored user agent carries " Proctor/<version>"; compare browsers without it.
 const baseUa = (ua?: string | null) => (ua || '').replace(/ Proctor\/[\d.]+$/, '');
 
+// The exam link is required: the page students must open (http/https only).
+const isHttpUrl = (v?: string | null) => typeof v === 'string' && /^https?:\/\/\S+$/i.test(v.trim());
+
 // Names are compared loosely (case, spacing) so "john  smith" == "John Smith".
 const sameName = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
 
@@ -103,6 +106,12 @@ export class ExamsService implements OnModuleInit, OnModuleDestroy {
     }
     if (!input.courseId) {
       throw new BadRequestException('"courseId" is required');
+    }
+    if (!isHttpUrl(input.examLink)) {
+      throw new BadRequestException('"examLink" is required (a full http(s):// address)');
+    }
+    if (input.maxWarnings !== undefined && !(Number(input.maxWarnings) >= 1)) {
+      throw new BadRequestException('maxWarnings must be at least 1');
     }
     const course = await this.prisma.course.findFirst({
       where: { id: input.courseId, teacherId },
@@ -294,7 +303,12 @@ export class ExamsService implements OnModuleInit, OnModuleDestroy {
     if (input.expectedStudents !== undefined) {
       data.expectedStudents = this.parseExpected(input.expectedStudents);
     }
-    if (input.examLink !== undefined) data.examLink = input.examLink?.trim() || null;
+    if (input.examLink !== undefined) {
+      if (!isHttpUrl(input.examLink)) {
+        throw new BadRequestException('"examLink" is required (a full http(s):// address)');
+      }
+      data.examLink = input.examLink!.trim();
+    }
     if (typeof input.disconnectGraceSec === 'number') {
       if (input.disconnectGraceSec < 0) {
         throw new BadRequestException('disconnectGraceSec must be >= 0');
