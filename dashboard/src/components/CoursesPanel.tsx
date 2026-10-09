@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { api } from '../api';
 import { SearchBar, btn } from '../ui';
+import { RequiredInput, RequiredLegend } from '../ui';
 
 const input =
   'px-3 py-2 rounded-lg text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500';
@@ -24,15 +25,19 @@ export function CoursesPanel({ onOpen }: { onOpen: (course: any) => void }) {
     load();
   }, []);
 
+  const [tried, setTried] = useState(false);
+
   async function create(e: FormEvent) {
     e.preventDefault();
     setError('');
+    setTried(true);
     if (!name.trim()) return setError('Course name is required.');
     try {
       await api.createCourse(name, year, section);
       setName('');
       setYear('');
       setSection('');
+      setTried(false);
       load();
     } catch (e: any) {
       setError(e.message);
@@ -57,11 +62,12 @@ export function CoursesPanel({ onOpen }: { onOpen: (course: any) => void }) {
     <section>
       <form onSubmit={create} className="flex flex-wrap gap-2 mb-4">
         <input value={year} onChange={(e) => setYear(e.target.value)} placeholder="Year" className={`w-28 ${input}`} />
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Course name" className={`flex-1 min-w-40 ${input}`} />
+        <RequiredInput value={name} onChange={(e) => setName(e.target.value)} placeholder="Course name" inputClassName={input} missing={tried && !name.trim()} className="flex-1 min-w-40" />
         <input value={section} onChange={(e) => setSection(e.target.value)} placeholder="Section" className={`w-28 ${input}`} />
         <button className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700">
           Add course
         </button>
+        <div className="w-full"><RequiredLegend /></div>
       </form>
 
       {error && <p className="text-sm text-red-600 dark:text-red-400 mb-3">{error}</p>}

@@ -94,7 +94,7 @@ export function ExamSettings({
 
           <label className="block">
             <span className="inline-flex items-center gap-1 text-gray-600 dark:text-gray-300">
-              Exam link (required page)
+              Exam link (page students must open)
               <HelpIcon text="The URL students must open for this exam. Auto-whitelisted; students whose session never visits this domain are flagged 'Did not open exam'." />
             </span>
             <input

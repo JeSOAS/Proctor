@@ -1,3 +1,4 @@
+import type React from 'react';
 import { useState } from 'react';
 
 // Shared button styles — filled/tinted so actions clearly stand out.
@@ -355,5 +356,40 @@ export function StatusPill({ session, examClosed }: { session: any; examClosed: 
       <span className={`w-1.5 h-1.5 rounded-full ${DOT[color]}`} />
       {label}
     </span>
+  );
+}
+
+/// Required-field marker: a red asterisk after a label, or inside an input.
+export function Req() {
+  return <span className="text-red-600 dark:text-red-400 font-bold" aria-hidden>*</span>;
+}
+
+/// Red border/ring for a required field left empty after a submit attempt.
+export const missingCls = (show: boolean) =>
+  show ? ' !border-red-500 ring-1 ring-red-500 dark:!border-red-400' : '';
+
+/// An input with a red * inside its right edge (for compact forms without labels).
+export function RequiredInput({
+  className = '',
+  inputClassName = '',
+  missing,
+  ...props
+}: React.InputHTMLAttributes<HTMLInputElement> & { missing?: boolean; inputClassName?: string }) {
+  return (
+    <span className={`relative ${className}`}>
+      <input {...props} required aria-required className={`w-full pr-6 ${inputClassName}${missingCls(!!missing)}`} />
+      <span className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
+        <Req />
+      </span>
+    </span>
+  );
+}
+
+/// "* required" legend shown under forms that have required fields.
+export function RequiredLegend() {
+  return (
+    <p className="text-xs text-gray-500 dark:text-gray-400">
+      <Req /> required
+    </p>
   );
 }

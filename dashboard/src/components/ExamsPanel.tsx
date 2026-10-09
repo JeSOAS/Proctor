@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { api } from '../api';
 import { HelpIcon, JoinCode, SearchBar, btn } from '../ui';
+import { RequiredInput, RequiredLegend } from '../ui';
 import { ExamSettings } from './ExamSettings';
 
 const STATUS_STYLES: Record<string, string> = {
@@ -51,9 +52,12 @@ export function ExamsPanel({ course, onOpen }: { course: any; onOpen: (exam: any
     load();
   }, [course.id]);
 
+  const [tried, setTried] = useState(false);
+
   async function create(e: FormEvent) {
     e.preventDefault();
     setError('');
+    setTried(true);
     if (!title.trim()) return setError('Exam title is required.');
     try {
       await api.createExam({
@@ -69,6 +73,7 @@ export function ExamsPanel({ course, onOpen }: { course: any; onOpen: (exam: any
         endsAt: endsAt ? new Date(endsAt).toISOString() : undefined,
       });
       setTitle('');
+      setTried(false);
       setExpectedStudents('');
       setExamLink('');
       setStartsAt('');
@@ -106,7 +111,7 @@ export function ExamsPanel({ course, onOpen }: { course: any; onOpen: (exam: any
     <section>
       <form onSubmit={create} className="mb-4 space-y-2">
         <div className="flex flex-wrap gap-2">
-          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Exam title" className={`flex-1 min-w-48 ${input}`} />
+          <RequiredInput value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Exam title" inputClassName={input} missing={tried && !title.trim()} className="flex-1 min-w-48" />
           <label className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
             Max warnings
             <input type="number" min={0} value={maxWarnings} onChange={(e) => setMaxWarnings(Number(e.target.value))} className={`w-16 ${input}`} />
@@ -121,7 +126,7 @@ export function ExamsPanel({ course, onOpen }: { course: any; onOpen: (exam: any
         </div>
         <label className="block text-xs text-gray-500 dark:text-gray-400">
           <span className="inline-flex items-center gap-1">
-            Exam link (required page)
+            Exam link (page students must open)
             <HelpIcon text="The URL students must open for this exam (e.g. the Google Form). It's auto-whitelisted, and any student whose session never visits this domain is flagged 'Did not open exam'." />
           </span>
           <input value={examLink} onChange={(e) => setExamLink(e.target.value)} placeholder="https://docs.google.com/forms/d/…" className={`block w-full mt-1 ${input}`} />
@@ -147,6 +152,7 @@ export function ExamsPanel({ course, onOpen }: { course: any; onOpen: (exam: any
             Times are in your local time zone ({localZone}).
           </p>
         )}
+        <RequiredLegend />
       </form>
 
       {error && <p className="text-sm text-red-600 dark:text-red-400 mb-3">{error}</p>}

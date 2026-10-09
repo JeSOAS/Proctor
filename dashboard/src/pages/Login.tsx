@@ -1,15 +1,19 @@
 import { FormEvent, useState } from 'react';
 import { api, setToken } from '../api';
+import { Req, RequiredLegend, missingCls } from '../ui';
 
 export function Login({ onLogin }: { onLogin: (teacher: any) => void }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [tried, setTried] = useState(false);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError('');
+    setTried(true);
+    if (!email.trim() || !password) return setError('Email and password are required.');
     setBusy(true);
     try {
       const { token, teacher } = await api.login(email, password);
@@ -34,13 +38,14 @@ export function Login({ onLogin }: { onLogin: (teacher: any) => void }) {
         <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-1">Proctor</h1>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">Instructor sign in</p>
 
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
-        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" className={input} />
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email <Req /></label>
+        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" className={input + missingCls(tried && !email.trim())} />
 
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password</label>
-        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" className={input} />
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Password <Req /></label>
+        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" className={input + missingCls(tried && !password)} />
 
         {error && <p className="text-sm text-red-600 dark:text-red-400 mb-3">{error}</p>}
+        <div className="mb-3"><RequiredLegend /></div>
 
         <button
           type="submit"

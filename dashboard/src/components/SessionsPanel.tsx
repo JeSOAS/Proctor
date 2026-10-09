@@ -162,6 +162,7 @@ export function SessionsPanel({ exam: navExam }: { exam: any }) {
   const [violations, setViolations] = useState<any[]>([]);
   const [q, setQ] = useState('');
   const [error, setError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
 
   // Kept in sync with the settings panel so the warning badges use the live max.
   const [max, setMax] = useState<number>(navExam.maxWarnings ?? 3);
@@ -354,7 +355,15 @@ export function SessionsPanel({ exam: navExam }: { exam: any }) {
 
       <SearchBar value={q} onChange={setQ} placeholder="Search students…" />
       <div className="flex items-center gap-3 mb-2">
-        <button onClick={load} className={btn.neutral}>
+        <button
+          onClick={async () => {
+            setRefreshing(true);
+            await load();
+            setRefreshing(false);
+          }}
+          className={`${btn.neutral} inline-flex items-center gap-1.5`}
+        >
+          <span aria-hidden className={`inline-block ${refreshing ? 'animate-spin' : ''}`}>↻</span>
           Refresh
         </button>
         <button onClick={() => exportCsv('summary')} className={btn.neutral} disabled={sessions.length === 0}>
