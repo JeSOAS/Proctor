@@ -110,14 +110,42 @@ async function warnStudent(title, message) {
   notify(title, message);
   try {
     const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-    if (tab && tab.id != null) {
-      await chrome.tabs.sendMessage(tab.id, { type: '__proctor_warning', text: `${title}: ${message}` });
+    if (!tab || tab.id == null) return;
+    const text = `${title}: ${message}`;
+    try {
+      await chrome.tabs.sendMessage(tab.id, { type: '__proctor_warning', text });
       console.log('[Proctor/bg] warning shown on page:', message);
+    } catch (_) {
+      // The page's content script is gone (the page was open when the extension
+      // was reloaded/updated) — draw the banner directly instead.
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: injectWarningBanner, args: [text] });
+      console.log('[Proctor/bg] warning injected on page:', message);
     }
   } catch (err) {
-    // No content script on that page (chrome://, Web Store, not yet loaded).
-    console.log('[Proctor/bg] page banner not available here; desktop notification only:', err.message);
+    // Pages extensions can't touch (chrome://, the Web Store): desktop notification only.
+    console.log('[Proctor/bg] page banner not possible here; desktop notification only:', err.message);
   }
+}
+
+// Same banner as content.js showWarning(), self-contained for executeScript.
+function injectWarningBanner(text) {
+  let b = document.getElementById('__proctor_warning');
+  if (!b) {
+    b = document.createElement('div');
+    b.id = '__proctor_warning';
+    b.setAttribute(
+      'style',
+      'position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:2147483647;' +
+        'max-width:min(560px,calc(100vw - 32px));padding:14px 20px;border-radius:10px;' +
+        'background:#b91c1c;color:#fff;font:600 16px/1.4 system-ui,-apple-system,sans-serif;' +
+        'box-shadow:0 8px 24px rgba(0,0,0,.35);text-align:center;pointer-events:none;',
+    );
+    (document.body || document.documentElement).appendChild(b);
+  }
+  b.textContent = text;
+  b.style.display = 'block';
+  clearTimeout(window.__proctorWarnTimer);
+  window.__proctorWarnTimer = setTimeout(() => (b.style.display = 'none'), 8000);
 }
 
 // Act on the backend's response to a reported event: optionally warn the
@@ -203,6 +231,9 @@ async function report(type, payload = {}) {
     if (!res.ok) throw new Error(`POST violation → ${res.status}`);
     console.log('[Proctor/bg] recorded', type, payload);
     const data = await res.json().catch(() => ({}));
+    // Trace for debugging warnings: did the backend say to warn for this event?
+    console.log('[Proctor/bg]', type, '→ counted now:', !!data.concerning, '| notify:', !!data.notifyStudent,
+      '| count:', data.concerningCount, '/', data.maxWarnings);
     await handleReportResponse(data);
     flushBuffer(); // connection is up — drain anything buffered during an outage
   } catch (err) {

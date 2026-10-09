@@ -89,9 +89,19 @@ export class SessionsService {
     if (input.type === 'WINDOW_BLUR') {
       countsNow = false;
     } else if (input.type === 'WINDOW_FOCUS') {
+      // The absence this return closes = the latest WINDOW_BLUR before it with no
+      // WINDOW_FOCUS in between (other events, e.g. a fullscreen exit or idle,
+      // may be logged while the student is away).
       const i = events.findIndex((e) => e.id === created.id);
-      const prev = i > 0 ? events[i - 1] : undefined;
-      countsNow = !!prev && prev.type === 'WINDOW_BLUR' && r.concerning.has(prev.id);
+      let blur: (typeof events)[number] | undefined;
+      for (let k = i - 1; k >= 0; k--) {
+        if (events[k].type === 'WINDOW_FOCUS') break;
+        if (events[k].type === 'WINDOW_BLUR') {
+          blur = events[k];
+          break;
+        }
+      }
+      countsNow = !!blur && r.concerning.has(blur.id);
     }
     const concerningCount = input.type === 'WINDOW_BLUR'
       ? r.concerning.size - (r.concerning.has(created.id) ? 1 : 0) // exclude the provisional blur
