@@ -1,61 +1,45 @@
 // Content script
 // ----------------------------------------------------------------
-// Runs in the context of every web page (per host_permissions).
-// Detects in-page events the background worker can't see (clipboard use)
-// and forwards them via chrome.runtime.sendMessage.
-// All backend communication happens in background.js.
+// Runs in every web page (per host_permissions), but only acts while the student
+// has joined an exam: forwards in-page events the background worker can't see
+// (clipboard use, Google Forms submission, leaving fullscreen) and enforces the
+// fullscreen lock on the exam page. All backend calls happen in background.js;
+// tab switches and window focus are handled there too.
 //
-// Tab switches and window focus are handled by the background worker —
-// visibilitychange is NOT reported here because it duplicates those events.
-//
-// To view this log:
-//   Open any page  →  F12  →  Console tab
-//
-// NOTE: After reloading the extension at chrome://extensions, you must REFRESH
-//       any open tabs — already-loaded pages won't have the new content script.
+// Pages open before an extension reload keep the old (disconnected) script until
+// refreshed; warnings still reach them because background.js injects the banner.
 // ----------------------------------------------------------------
 
-console.log('[Proctor/cs] Content script loaded on', location.href);
+// The current enrollment, kept up to date. Nothing is reported unless the student
+// has joined an exam, so this script stays silent on every other page.
+let currentEnrollment = null;
 
 function send(type, payload = {}) {
-  // Fire-and-forget; ignore errors when the worker is asleep
+  if (!currentEnrollment) return;
   try {
     chrome.runtime.sendMessage({ type, payload });
-  } catch (_) {}
+  } catch (_) {
+    /* worker unavailable (extension reloaded) — nothing to do */
+  }
 }
 
 // ---------- Clipboard ----------
 
-document.addEventListener('copy', () => {
-  console.log('[Proctor/cs] copy');
-  send('COPY');
-});
-
-document.addEventListener('paste', () => {
-  console.log('[Proctor/cs] paste');
-  send('PASTE');
-});
-
-document.addEventListener('cut', () => {
-  console.log('[Proctor/cs] cut');
-  send('CUT');
-});
+for (const type of ['copy', 'paste', 'cut']) {
+  document.addEventListener(type, () => send(type.toUpperCase()));
+}
 
 // ---------- Exam submission (Google Forms) ----------
 //
 // After a successful submit, Google Forms navigates to a ".../formResponse"
-// page and shows "Your response has been recorded." Detecting that page load is
-// a reliable "the student finished" signal. The background worker only records
-// it while the student is enrolled, so it's harmless on any other form.
+// page ("Your response has been recorded."), a reliable "the student finished"
+// signal. Checked once the enrollment is known (see init below).
 
 function detectGoogleFormSubmit() {
   if (location.hostname === 'docs.google.com' && location.pathname.includes('/formResponse')) {
-    console.log('[Proctor/cs] Google Form submission detected');
     send('EXAM_SUBMITTED', { url: location.href });
   }
 }
-
-detectGoogleFormSubmit();
 
 // ---------- Fullscreen lock + finish prompt ----------
 //
@@ -165,11 +149,9 @@ function finishExam() {
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
 }
 
-// The enrollment is read from storage and kept current, so the lock also works
-// on an exam tab that was opened BEFORE the student joined, and re-prompts when
-// the student comes back to the exam tab (switching tabs exits fullscreen).
-let currentEnrollment = null;
-
+// The lock follows the enrollment, so it also works on an exam tab opened BEFORE
+// the student joined, and re-prompts when they come back to the exam tab
+// (switching tabs exits fullscreen).
 function enforced() {
   return fsActive && !!currentEnrollment && onExamPage(currentEnrollment.examLink);
 }
@@ -178,13 +160,14 @@ function checkPrompt() {
   if (enforced() && !document.fullscreenElement && document.visibilityState === 'visible') showPrompt();
 }
 
-async function initFullscreenLock() {
+async function init() {
   try {
     const store = await chrome.storage.local.get('enrollment');
     currentEnrollment = store.enrollment || null;
   } catch (_) {
     return;
   }
+  detectGoogleFormSubmit();
 
   // Joined / left while this page was already open.
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -226,42 +209,6 @@ async function initFullscreenLock() {
   checkPrompt();
 }
 
-// ---------- On-page violation warning ----------
-//
-// The background worker asks the active tab to show this after a counted
-// violation (when the exam has "Notify students" on). Drawn in the page, so it
-// is visible even when the operating system suppresses desktop notifications.
-
-let warnBanner = null;
-let warnTimer = null;
-
-function showWarning(text) {
-  if (!warnBanner) {
-    warnBanner = document.createElement('div');
-    warnBanner.id = '__proctor_warning';
-    warnBanner.setAttribute(
-      'style',
-      'position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:2147483647;' +
-        'max-width:min(560px,calc(100vw - 32px));padding:14px 20px;border-radius:10px;' +
-        'background:#b91c1c;color:#fff;font:600 16px/1.4 system-ui,-apple-system,sans-serif;' +
-        'box-shadow:0 8px 24px rgba(0,0,0,.35);text-align:center;pointer-events:none;',
-    );
-    (document.body || document.documentElement).appendChild(warnBanner);
-  }
-  warnBanner.textContent = text;
-  warnBanner.style.display = 'block';
-  clearTimeout(warnTimer);
-  warnTimer = setTimeout(() => (warnBanner.style.display = 'none'), 8000);
-}
-
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg && msg.type === '__proctor_warning') {
-    showWarning(msg.text);
-    sendResponse({ shown: true });
-  }
-  return false;
-});
-
 // document_start can run before <body>; wait for the DOM if needed.
-if (document.body) initFullscreenLock();
-else document.addEventListener('DOMContentLoaded', initFullscreenLock);
+if (document.body) init();
+else document.addEventListener('DOMContentLoaded', init);

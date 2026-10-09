@@ -1,13 +1,12 @@
 // Background service worker
 // ----------------------------------------------------------------
-// Records tab/window events for a student who has JOINED an exam. The student
-// registers in the popup (name + join code); the popup stores the resulting
-// `enrollment` ({ sessionId, examTitle, ... }) in chrome.storage.local. Until
-// that exists, this worker does nothing — no monitoring before the student joins.
+// Records tab/window events for a student who has JOINED an exam. The popup
+// stores the `enrollment` ({ sessionId, examTitle, examLink, studentName }) in
+// chrome.storage.local; until it exists this worker does nothing.
 //
-// A heartbeat pings the backend every 30s; when the browser closes the beats
-// stop and the backend auto-marks the session ENDED (MV3 workers are killed
-// without any shutdown event we could report from).
+// A heartbeat pings the backend every 30s. When the beats stop (browser closed,
+// network down) the backend marks the session DISCONNECTED, and ENDED if it
+// doesn't come back (MV3 workers get no shutdown event to report from).
 //
 // To view this log:
 //   chrome://extensions  →  Proctor  →  click "service worker" link  →  Console tab
@@ -103,31 +102,26 @@ function notify(title, message) {
   }
 }
 
-// Show a warning to the student: as a banner inside the page they're on (works
-// regardless of the OS notification settings) AND as a desktop notification
-// (covers pages where content scripts can't run, e.g. chrome:// pages).
+// Show a warning to the student: a banner injected into the page they're on
+// (visible regardless of OS notification settings, and on pages opened before
+// an extension reload) AND a desktop notification (covers pages extensions
+// can't touch, e.g. chrome:// and the Web Store).
 async function warnStudent(title, message) {
   notify(title, message);
   try {
     const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
     if (!tab || tab.id == null) return;
-    const text = `${title}: ${message}`;
-    try {
-      await chrome.tabs.sendMessage(tab.id, { type: '__proctor_warning', text });
-      console.log('[Proctor/bg] warning shown on page:', message);
-    } catch (_) {
-      // The page's content script is gone (the page was open when the extension
-      // was reloaded/updated) — draw the banner directly instead.
-      await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: injectWarningBanner, args: [text] });
-      console.log('[Proctor/bg] warning injected on page:', message);
-    }
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: injectWarningBanner,
+      args: [`${title}: ${message}`],
+    });
   } catch (err) {
-    // Pages extensions can't touch (chrome://, the Web Store): desktop notification only.
-    console.log('[Proctor/bg] page banner not possible here; desktop notification only:', err.message);
+    console.log('[Proctor/bg] no page banner here, desktop notification only:', err.message);
   }
 }
 
-// Same banner as content.js showWarning(), self-contained for executeScript.
+// Runs inside the page (via executeScript), so it must be self-contained.
 function injectWarningBanner(text) {
   let b = document.getElementById('__proctor_warning');
   if (!b) {
@@ -229,10 +223,8 @@ async function report(type, payload = {}) {
       return;
     }
     if (!res.ok) throw new Error(`POST violation → ${res.status}`);
-    console.log('[Proctor/bg] recorded', type, payload);
     const data = await res.json().catch(() => ({}));
-    // Trace for debugging warnings: did the backend say to warn for this event?
-    console.log('[Proctor/bg]', type, '→ counted now:', !!data.concerning, '| notify:', !!data.notifyStudent,
+    console.log('[Proctor/bg] recorded', type, payload.url || '', '| warn:', !!(data.concerning && data.notifyStudent),
       '| count:', data.concerningCount, '/', data.maxWarnings);
     await handleReportResponse(data);
     flushBuffer(); // connection is up — drain anything buffered during an outage
@@ -402,8 +394,8 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
 
 // ---------- Messages ----------
 //
-// Control messages from the popup start with "__proctor_"; everything else is
-// a monitoring event forwarded by the content script.
+// Control messages (popup / content script) start with "__proctor_"; everything
+// else is a monitoring event forwarded by the content script.
 
 // End the exam because the student chose "Finish" in the fullscreen prompt.
 // Distinct end reason so the log tells this apart from the popup Leave button.
@@ -431,6 +423,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg && msg.type === '__proctor_finish') {
     finishExam();
+    sendResponse({ ok: true });
+    return false;
+  }
+  if (msg && msg.type === '__proctor_left') {
+    clearEnrollment(); // the popup already ended the session on the server
     sendResponse({ ok: true });
     return false;
   }

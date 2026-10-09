@@ -99,13 +99,9 @@ async function join() {
     await chrome.storage.local.set({
       enrollment: {
         sessionId: data.sessionId,
-        examId: data.examId,
         examTitle: data.examTitle,
-        maxWarnings: data.maxWarnings,
-        // The required exam page; the worker uses it to detect exam start.
-        examLink: data.examLink || null,
+        examLink: data.examLink || null, // opened below; marks exam start + the fullscreen page
         studentName,
-        joinedAt: Date.now(),
       },
     });
     chrome.storage.session.remove('joinDraft'); // joined — the draft is no longer needed
@@ -135,6 +131,9 @@ async function leave() {
       // Even if the backend is unreachable, clear locally so the student can rejoin
     }
   }
+  // The worker clears the enrollment and its per-exam state (and applies an
+  // update that arrived during the exam); remove it here too in case it's asleep.
+  await chrome.runtime.sendMessage({ type: '__proctor_left' }).catch(() => {});
   await chrome.storage.local.remove('enrollment');
   await render();
 }
