@@ -196,6 +196,8 @@ None of these are bugs — they are scoped-out on purpose for SP2:
   only the Google Forms Apps Script exists (Microsoft Forms would need a Power
   Automate flow). Auto-*submitting* a student's form is intentionally not done.
 - **Telegram alerts** — in the deck, not implemented.
+- **Student sign-in with university Microsoft accounts** — replace the typed
+  name/ID with a verified Entra ID sign-in; design in `docs/FUTURE-AUTH.md`.
 - **Student rate-limiting / anti-abuse** — student endpoints are rate-limited
   per IP; anyone with a join code can still post events; a real deployment
   should bind a session to its device.
