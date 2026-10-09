@@ -34,7 +34,7 @@ so the raw log is never altered and rules can be re-tuned without re-collecting.
   site that is **not** whitelisted, opening the extensions page
   (`chrome://extensions`), a significant disconnect, or leaving fullscreen.
 - **Minor / info (recorded, never counts):** a window blur shorter than
-  **30 s** (`CONCERNING_BLUR_MS`), a blank/new tab, a whitelisted or
+  the exam's **away-from-Chrome allowance** (default 30 s), a blank/new tab, a whitelisted or
   browser-internal page, a query-only re-navigation of the same page, going
   idle, brief reconnects.
 
