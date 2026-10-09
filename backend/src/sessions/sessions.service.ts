@@ -79,8 +79,23 @@ export class SessionsService {
     });
     const session = settings;
     const r = classify(events, { examLink: exam?.examLink });
-    const concerningCount = r.concerning.size;
     const maxWarnings = exam?.maxWarnings ?? 3;
+
+    // Leaving Chrome (WINDOW_BLUR) only counts if the student stays away >= 30 s,
+    // which is known when they come back. So: a blur itself never warns or
+    // auto-closes (the classifier counts a still-open blur provisionally), and
+    // the returning WINDOW_FOCUS warns if the absence it closes was counted.
+    let countsNow = r.concerning.has(created.id);
+    if (input.type === 'WINDOW_BLUR') {
+      countsNow = false;
+    } else if (input.type === 'WINDOW_FOCUS') {
+      const i = events.findIndex((e) => e.id === created.id);
+      const prev = i > 0 ? events[i - 1] : undefined;
+      countsNow = !!prev && prev.type === 'WINDOW_BLUR' && r.concerning.has(prev.id);
+    }
+    const concerningCount = input.type === 'WINDOW_BLUR'
+      ? r.concerning.size - (r.concerning.has(created.id) ? 1 : 0) // exclude the provisional blur
+      : r.concerning.size;
 
     // Auto-close: end the session once the student reaches the limit (if enabled).
     let autoClosed = false;
@@ -94,7 +109,7 @@ export class SessionsService {
 
     return {
       id: created.id,
-      concerning: r.concerning.has(created.id), // did THIS event count?
+      concerning: countsNow, // should the student be warned for THIS event?
       concerningCount,
       maxWarnings,
       notifyStudent: !!exam?.notifyStudent,

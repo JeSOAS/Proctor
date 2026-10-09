@@ -263,6 +263,7 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
   } catch (_) {}
   if (url) rememberTabUrl(activeInfo.tabId, url);
   else url = await recallTabUrl(activeInfo.tabId);
+  chrome.storage.session.set({ lastActiveTabId: activeInfo.tabId });
   report('TAB_SWITCH', { tabId: activeInfo.tabId, url });
   maybeReportExamStarted(url);
 });
@@ -316,6 +317,20 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
     report('WINDOW_BLUR', { url });
   } else {
     report('WINDOW_FOCUS', { windowId });
+    // Moving to ANOTHER Chrome window shows a different page without any tab
+    // switch event. Report that window's active tab as a tab switch so the
+    // backend judges the page like any other switch (e.g. ChatGPT in a second
+    // window).
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, windowId });
+      const { lastActiveTabId } = await chrome.storage.session.get('lastActiveTabId');
+      if (tab && tab.id !== lastActiveTabId) {
+        chrome.storage.session.set({ lastActiveTabId: tab.id });
+        const url = tab.url || tab.pendingUrl || (await recallTabUrl(tab.id));
+        report('TAB_SWITCH', { tabId: tab.id, url, viaWindow: windowId });
+        maybeReportExamStarted(url);
+      }
+    } catch (_) {}
   }
 });
 

@@ -122,6 +122,10 @@ State these plainly so results aren't misread:
 - [ ] Exam with **Notify students** on: switch to a non-allowed site (e.g. chatgpt.com) → a red "Proctor warning … Warning N of M" banner appears at the top of that page within a couple of seconds.
 - [ ] Same, with Windows notifications for Chrome turned **off** → the banner still appears.
 - [ ] Notify students **off** → no banner, no notification.
+- [ ] Alt-Tab to another app for **under 30 s** and back → no warning.
+- [ ] Alt-Tab away for **30 s or more** and back → banner appears on return ("Warning N of M").
+- [ ] Open a **second Chrome window** with chatgpt.com, switch to it with Alt-Tab / the taskbar → a "Switched browser tab" violation with the ChatGPT URL, and a banner.
+- [ ] Switch back to the exam window → recorded, not counted.
 - [ ] Service-worker console (`chrome://extensions` → Proctor → service worker) shows "warning shown on page" for each warning.
 
 ## Not built — do NOT expect these in the mock
