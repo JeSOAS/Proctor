@@ -1,4 +1,4 @@
-# Deployment Runbook — Oracle Ubuntu 22.04 VM
+# Deployment Runbook — Oracle Cloud Ubuntu 24.04 VM
 
 Deploys the Proctor backend (NestJS + PostgreSQL) with Docker Compose, then
 exposes it over HTTPS with a Cloudflare Tunnel (no open ports on the VM).
@@ -39,9 +39,14 @@ cp docker/.env.example docker/.env
 echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)"
 echo "ADMIN_TOKEN=$(openssl rand -hex 24)"
 echo "JWT_SECRET=$(openssl rand -hex 24)"
+echo "WEBHOOK_SECRET=$(openssl rand -hex 24)"   # Google Forms confirmation, Step 4
 # edit docker/.env and paste those in (keep ADMIN_TOKEN — you need it to create teachers)
 nano docker/.env
 ```
+
+Optional in `docker/.env`: `MIN_EXTENSION_VERSION` (refuse joins from older
+extensions — set it only once that version is live on the Chrome Web Store),
+`THROTTLE_LIMIT` / `THROTTLE_TTL_MS` (rate limit).
 
 ### 1.4 Build and start
 
@@ -166,3 +171,23 @@ are created by an admin (with `ADMIN_TOKEN`) — there is no public sign-up.
 2. Open **https://proctor.jesoas.org/dashboard/** and sign in with that email and
    password. Create courses and exams, share each exam's join code with students,
    and watch live sessions + violations — no more curl.
+
+---
+
+## Step 4 — Google Forms submission confirmation (once per teacher)
+
+Lets the dashboard show **✔ Submission confirmed** when a student actually
+submits the exam's Google Form. Full guide: `integrations/google-forms/README.md`.
+
+1. **Server:** make sure `WEBHOOK_SECRET` is set in `docker/.env` (Step 1.3) and
+   redeploy (`./deploy.sh`). Without it the webhook rejects everything.
+2. **Teacher's Google account:** script.google.com → New project → paste
+   `integrations/google-forms/Code.gs`; set `BACKEND_URL` and `WEBHOOK_SECRET`
+   (same value as the server) at the top.
+3. Choose **`installAutoSync`** in the toolbar → **Run** → authorize. It then
+   re-syncs every minute: any exam whose Exam link is one of this account's
+   forms gets a submit trigger automatically.
+4. **Per exam (teacher):** in the form, turn on *Collect email addresses* (or add
+   a "Student ID" question); in Proctor, set the form's URL as the Exam link.
+5. **Verify:** join the exam with a test student ID, submit the form → within a
+   few seconds the student shows **✔ Submission confirmed**.

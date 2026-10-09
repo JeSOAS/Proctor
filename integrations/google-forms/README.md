@@ -42,11 +42,14 @@ starts confirming submissions. Nothing else to do — no per-form scripting.
 ## Verify it works
 
 - Submit a test response with an id that matches a **joined** session.
-- The dashboard session shows a blue **"Submitted the exam"** row at the submit
-  time (and *Finished early* if before the end time; later events greyed).
+- The student shows a green **✔ Submission confirmed** badge and a "Submission
+  confirmed (form)" row in their log (*Finished early* if before the end time;
+  later events marked "after submit").
 - On the VM: `docker compose logs --tail 20 backend` shows `POST /webhooks/form-submit`.
-- Negative checks: a POST without the secret is rejected; a submission whose id
-  never joined returns `{ "matched": false }` and changes nothing.
+- Negative checks: a POST without the secret is rejected (401). A submission
+  whose id never joined creates a separate row, **"Submitted, but no Proctor
+  session with this ID"** (`{ "matched": true, "joined": false }`); if that
+  student joins later with the same ID, the row becomes their session.
 
 curl smoke test (replace the secret; use a real joined student id + the form URL):
 
@@ -55,5 +58,5 @@ curl -s -X POST https://proctor.jesoas.org/webhooks/form-submit \
   -H 'content-type: application/json' \
   -H 'x-webhook-secret: YOUR_SECRET' \
   -d '{"publishedUrl":"https://docs.google.com/forms/d/e/XXXX/viewform","studentId":"6530338"}'
-# -> {"matched":true,"sessionId":"..."} once the exam link + a joined session exist
+# -> {"matched":true,"sessionId":"...","joined":true} for a joined session
 ```

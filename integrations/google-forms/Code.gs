@@ -13,13 +13,13 @@
  *      this file. Set BACKEND_URL and WEBHOOK_SECRET below (secret must match
  *      the backend's WEBHOOK_SECRET env var).
  *   2. Choose the function "installAutoSync" in the toolbar dropdown and Run.
- *      Authorize when prompted. That's it — it now re-syncs every 10 minutes.
+ *      Authorize when prompted. That's it — it now re-syncs every minute.
  *
  * TEACHER, per exam (2 pages only):
  *   - Build the Google Form (in this same account). Turn ON "Collect email
  *     addresses" OR add a "Student ID" question.
  *   - On the Proctor dashboard, set that form's URL as the exam's "Exam link".
- *   Within ~10 minutes the script picks it up and starts confirming submissions.
+ *   Within ~1 minute the script picks it up and starts confirming submissions.
  */
 
 const BACKEND_URL = 'https://proctor.jesoas.org';
