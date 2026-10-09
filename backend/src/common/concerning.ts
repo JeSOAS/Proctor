@@ -1,10 +1,9 @@
 import { DomainRule, isAiHost, isAllowedUrl, ruleMatches } from './allowed-domains';
 
-// A bare window blur (student left the whole Chrome window, no navigation)
-// counts as a warning only if they stayed away at least this long. Shorter
-// blurs are recorded but not counted — leaving the window for a few seconds
-// isn't evidence of cheating. (Policy chosen with the user: "count only if long".)
-const CONCERNING_BLUR_MS = 30_000; // default; each exam can override (Exam.awayGraceSec)
+// Leaving the Chrome window counts only if the student stays away at least this
+// long (shorter absences are recorded, not counted). Default; each exam sets its
+// own allowance (Exam.awayGraceSec).
+const CONCERNING_BLUR_MS = 30_000;
 
 // The browser's own extensions page — where the student would go to disable
 // this extension. Navigating here during an exam is a tampering-intent signal
@@ -26,16 +25,10 @@ function payloadOf(payload: unknown): Record<string, unknown> | null {
   }
 }
 
-// Read the gap seconds from a RECONNECT/LONG_DISCONNECT payload (string or object).
+// Gap seconds from a RECONNECT/LONG_DISCONNECT payload.
 function gapSeconds(payload: unknown): number {
-  if (payload == null) return 0;
-  try {
-    const p = typeof payload === 'string' ? JSON.parse(payload) : payload;
-    const s = (p as { seconds?: unknown })?.seconds;
-    return typeof s === 'number' && s > 0 ? s : 0;
-  } catch {
-    return 0;
-  }
+  const s = payloadOf(payload)?.seconds;
+  return typeof s === 'number' && s > 0 ? s : 0;
 }
 
 // Browser-internal pages are never a violation — opening a new tab lands on one.
@@ -53,7 +46,7 @@ export interface ClassifiableEvent {
   type: string;
   url: string | null;
   occurredAt: Date;
-  /** Stringified JSON (or object) — used to read disconnect gap seconds. */
+  /** Stringified JSON (or object): disconnect seconds, incognito flag, … */
   payload?: unknown;
 }
 
@@ -76,14 +69,14 @@ export interface ClassifyResult {
   idle: boolean;
   /** How many times the student reconnected (RECONNECT + LONG_DISCONNECT). */
   reconnectCount: number;
-  /** The student opened the browser's extensions page (tampering intent). */
+  /** Opened the extensions page or turned off incognito access (tampering intent). */
   tamperIntent: boolean;
   /** Total seconds the student was disconnected but returned — "unaccounted" time. */
   unaccountedSec: number;
 }
 
 /** Extract a bare host from a domain OR a full URL a teacher typed as the exam link. */
-export function hostOf(value: string | null | undefined): string | undefined {
+function hostOf(value: string | null | undefined): string | undefined {
   if (!value) return undefined;
   const raw = value.trim();
   if (!raw) return undefined;
@@ -133,7 +126,8 @@ function examLinkRule(examLink: string | null | undefined): DomainRule | null {
  *   - AI (chatgpt/gemini/claude/…) — sets aiUsed AND counts;
  *   - Concerning (counts) — navigation/tab/clipboard to a site that is NOT
  *     whitelisted, the exam link, or a browser-internal page;
- *   - Minor (logged, never counted) — a short window blur, a tab switch/open
+ *   - Minor (logged, never counted) — a window blur shorter than the exam's
+ *     allowance, a tab switch/open
  *     that lands on a whitelisted/blank/internal page, or the same page being
  *     re-stamped with a new query string.
  * The raw events are never discarded; this only decides what counts.
@@ -294,10 +288,3 @@ export function classify(
   };
 }
 
-/** Backwards-compatible helper: just the set of concerning event ids. */
-export function concerningIds(
-  events: ClassifiableEvent[],
-  opts: { examLink?: string | null; awayGraceSec?: number | null } = {},
-): Set<number> {
-  return classify(events, opts).concerning;
-}

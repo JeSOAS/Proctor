@@ -5,12 +5,11 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 
-/// Protects instructor/destructive endpoints (create exam, list, wipe, status,
-/// view sessions). If ADMIN_TOKEN is not set, the guard allows everything —
-/// convenient for local dev. In production ADMIN_TOKEN MUST be set, so these
-/// endpoints require a matching `x-admin-token` header. Student-facing
-/// endpoints (register, heartbeat, violations) are intentionally NOT guarded —
-/// the extension calls them without any credential.
+/// Protects the administrator endpoints: creating teacher accounts
+/// (POST /auth/register) and the dev wipe (DELETE /exams). Requires a matching
+/// `x-admin-token` header. If ADMIN_TOKEN is not set the guard allows everything
+/// (local dev only); in production it MUST be set. Instructor endpoints use the
+/// teacher JWT instead, and student endpoints are open.
 @Injectable()
 export class AdminGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {

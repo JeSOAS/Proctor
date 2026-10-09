@@ -9,7 +9,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { SessionsService } from '../sessions/sessions.service';
+import { SessionsService, STALE_TIMEOUT_MS } from '../sessions/sessions.service';
 import { classify } from '../common/concerning';
 import { buildLogCsv, buildSummaryCsv } from './csv-export';
 
@@ -17,9 +17,8 @@ import { buildLogCsv, buildSummaryCsv } from './csv-export';
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const CODE_LENGTH = 6;
 
-// Safeguard: an OPEN exam with no end time that has been open (since it was
-// opened or last reopened) longer than this
-// is auto-closed, so a forgotten exam can't stay open indefinitely.
+// Safeguard: an OPEN exam with no end time is auto-closed this long after it was
+// opened (or last reopened), so a forgotten exam can't stay open indefinitely.
 const MAX_EXAM_OPEN_HOURS = 24;
 
 // A student who opens the exam more than this after its scheduled start is
@@ -31,15 +30,9 @@ const LATE_START_GRACE_MS = 60_000;
 // runs at most this often; a few seconds' lag in auto-expiry is harmless.
 const MAINTENANCE_THROTTLE_MS = 15_000;
 
-// Scheduled exams must close at their end time even if nobody has the dashboard
-// open (in the 17 Sep trial an exam ending 10:00 only closed at 11:16, when the
-// instructor next looked, and students kept being monitored). A server timer
-// runs the same expiry sweep, so exams close within this much of endsAt.
+// Exams must close at their end time even when no dashboard is open, so a server
+// timer runs the same expiry sweep: exams close within this much of endsAt.
 const EXPIRY_SWEEP_MS = 30_000;
-
-// A session counts as "live" (someone is in it right now) if it heartbeated this
-// recently — the same 90 s after which it is treated as disconnected.
-const LIVE_SESSION_MS = 90_000;
 
 // endedReason of a row created by the form webhook for a submission whose
 // student ID matches no session (see webhooks.service). Not a real join.
@@ -131,10 +124,9 @@ export class ExamsService implements OnModuleInit, OnModuleDestroy {
         title: input.title.trim(),
         joinCode,
         courseId: course.id,
-        maxWarnings:
-          typeof input.maxWarnings === 'number' ? input.maxWarnings : undefined,
+        maxWarnings: input.maxWarnings !== undefined ? Math.floor(Number(input.maxWarnings)) : undefined,
         expectedStudents: this.parseExpected(input.expectedStudents),
-        examLink: input.examLink?.trim() || null,
+        examLink: input.examLink!.trim(),
         startsAt,
         endsAt,
         // A future-scheduled exam hasn't actually opened yet — its "actual"
@@ -177,11 +169,8 @@ export class ExamsService implements OnModuleInit, OnModuleDestroy {
       orderBy: { startedAt: 'asc' },
       include: { _count: { select: { violations: true } } },
     });
-    // Per-session signals, computed at read time from the events (in time
-    // order) — see common/concerning.ts. The raw log is never altered.
-    //   concerningCount — warnings, after filtering benign exam/login activity
-    //   aiUsed          — visited a known AI tool
-    //   didNotOpenExam  — an exam link is set but this session never touched it
+    // Per-session signals, computed at read time from the events (in time order),
+    // see common/concerning.ts. The raw log is never altered.
     const ids = sessions.map((s) => s.id);
     const events = ids.length
       ? await this.prisma.violation.findMany({
@@ -197,7 +186,8 @@ export class ExamsService implements OnModuleInit, OnModuleDestroy {
       else bySession.set(e.sessionId, [e]);
     }
     return sessions.map((s) => {
-      const r = classify(bySession.get(s.id) ?? [], { examLink: exam.examLink, awayGraceSec: exam.awayGraceSec });
+      const evs = bySession.get(s.id) ?? [];
+      const r = classify(evs, { examLink: exam.examLink, awayGraceSec: exam.awayGraceSec });
       const startedLate =
         !!exam.startsAt &&
         !!r.examStartedAt &&
@@ -216,11 +206,10 @@ export class ExamsService implements OnModuleInit, OnModuleDestroy {
         finishedEarly,
         idle: r.idle,
         reconnectCount: r.reconnectCount,
-        frequentReconnect: r.reconnectCount > 2,
         tamperIntent: r.tamperIntent,
         unaccountedSec: r.unaccountedSec,
-        idConflict: (bySession.get(s.id) ?? []).some((e) => e.type === 'ID_CONFLICT'),
-        nameMismatch: (bySession.get(s.id) ?? []).some((e) => e.type === 'NAME_MISMATCH'),
+        idConflict: evs.some((e) => e.type === 'ID_CONFLICT'),
+        nameMismatch: evs.some((e) => e.type === 'NAME_MISMATCH'),
         submittedWithoutJoining: s.endedReason === NO_SESSION,
       };
     });
@@ -409,7 +398,7 @@ export class ExamsService implements OnModuleInit, OnModuleDestroy {
       // browser), refuse instead of merging two students into one record, and
       // leave a trace on the existing session for the instructor.
       const live =
-        existing.status === 'ACTIVE' && now.getTime() - existing.lastSeenAt.getTime() < LIVE_SESSION_MS;
+        existing.status === 'ACTIVE' && now.getTime() - existing.lastSeenAt.getTime() < STALE_TIMEOUT_MS;
       if (live && (nameDiffers || (existing.userAgent && userAgent && baseUa(existing.userAgent) !== baseUa(userAgent)))) {
         await this.prisma.violation.create({
           data: {
@@ -462,16 +451,9 @@ export class ExamsService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
-    return {
-      sessionId: session.id,
-      examId: exam.id,
-      examTitle: exam.title,
-      maxWarnings: exam.maxWarnings,
-      notifyStudent: exam.notifyStudent,
-      // The extension uses this to detect exam start (first visit) and to know
-      // the form domain; it's auto-whitelisted server-side too.
-      examLink: exam.examLink,
-    };
+    // examLink: the extension opens it after joining and uses it to detect the
+    // exam start and the exam page (for the fullscreen lock).
+    return { sessionId: session.id, examTitle: exam.title, examLink: exam.examLink };
   }
 
   /// System/dev helper: wipe ALL exams across all teachers (admin-token only).

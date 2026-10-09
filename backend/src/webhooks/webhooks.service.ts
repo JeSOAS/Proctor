@@ -42,7 +42,7 @@ export class WebhooksService {
    * Record a Google Forms submission reported by the Apps Script webhook.
    * Correlates the FORM to an exam via the exam's stored `examLink`, and the
    * STUDENT to a session via the (digits-only) student id, then writes an
-   * authoritative EXAM_SUBMITTED event.
+   * authoritative SUBMISSION_CONFIRMED event.
    */
   async recordFormSubmission(input: {
     formId?: string;
@@ -57,11 +57,10 @@ export class WebhooksService {
     }
 
     // Which exam is this form? The teacher sets the exam link to the form URL.
-    const exams = await this.prisma.exam.findMany({
-      where: { examLink: { not: null } },
-      select: { id: true, examLink: true },
+    const exam = await this.prisma.exam.findFirst({
+      where: { OR: tokens.map((t) => ({ examLink: { contains: t } })) },
+      select: { id: true },
     });
-    const exam = exams.find((e) => e.examLink && tokens.some((t) => e.examLink!.includes(t)));
     if (!exam) return { matched: false, reason: 'no exam links to this form' };
 
     // Which student's session? Match by normalized student id.

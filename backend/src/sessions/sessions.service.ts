@@ -3,15 +3,18 @@ import { PrismaService } from '../prisma/prisma.service';
 import { classify } from '../common/concerning';
 
 // The extension heartbeats every 30s. An ACTIVE session with no beat for this
-// long is marked DISCONNECTED (heartbeats stopped — network drop / sleep /
-// extension off / browser closed, indistinguishable from the server).
-const STALE_TIMEOUT_MS = 90_000;
+// long is marked DISCONNECTED (network drop / sleep / extension off / browser
+// closed look the same to the server). Also the "someone is in this session right
+// now" threshold for the duplicate-ID check at join.
+export const STALE_TIMEOUT_MS = 90_000;
 // A DISCONNECTED session can resume (same session) within this window; after it,
 // the session is terminally ENDED and a return means a fresh join.
 const RESUME_WINDOW_MS = 10 * 60_000;
 // A disconnect gap at least this long counts as a real ("concerning") warning;
 // shorter blips are recorded but not counted toward the limit.
 const SIGNIFICANT_DISCONNECT_SEC = 180;
+// The read paths run the stale sweep at most this often (the dashboard polls ~5s).
+const STALE_SWEEP_THROTTLE_MS = 15_000;
 
 @Injectable()
 export class SessionsService {
@@ -54,10 +57,9 @@ export class SessionsService {
       },
     });
 
-    // Only the student-warning and auto-close features need a live count. If the
-    // exam uses neither, skip the extra query + re-classification entirely — the
-    // dashboard computes everything at read time anyway. This keeps the write
-    // path cheap under exam load (dozens of students reporting many events).
+    // Only student warnings and auto-close need a live count; if the exam uses
+    // neither, skip the extra query and classification (the dashboard computes
+    // everything at read time anyway), keeping the write path cheap.
     const settings = await this.prisma.studentSession.findUnique({
       where: { id: sessionId },
       select: {
@@ -68,7 +70,7 @@ export class SessionsService {
       },
     });
     const exam = settings?.exam;
-    if (!exam?.notifyStudent && !exam?.autoClose) {
+    if (!exam || (!exam.notifyStudent && !exam.autoClose)) {
       return { id: created.id, concerning: false, concerningCount: 0, maxWarnings: exam?.maxWarnings ?? 3, notifyStudent: false, autoClosed: false };
     }
 
@@ -77,13 +79,12 @@ export class SessionsService {
       select: { id: true, type: true, url: true, payload: true, occurredAt: true },
       orderBy: { occurredAt: 'asc' },
     });
-    const session = settings;
-    const r = classify(events, { examLink: exam?.examLink, awayGraceSec: exam?.awayGraceSec });
-    const maxWarnings = exam?.maxWarnings ?? 3;
+    const r = classify(events, { examLink: exam.examLink, awayGraceSec: exam.awayGraceSec });
+    const maxWarnings = exam.maxWarnings;
 
-    // Leaving Chrome (WINDOW_BLUR) only counts if the student stays away >= 30 s,
-    // which is known when they come back. So: a blur itself never warns or
-    // auto-closes (the classifier counts a still-open blur provisionally), and
+    // Leaving Chrome (WINDOW_BLUR) only counts if the student stays away for the
+    // exam's allowance, which is known when they come back. So a blur never warns
+    // or auto-closes (the classifier counts a still-open blur provisionally), and
     // the returning WINDOW_FOCUS warns if the absence it closes was counted.
     let countsNow = r.concerning.has(created.id);
     if (input.type === 'WINDOW_BLUR') {
@@ -109,7 +110,7 @@ export class SessionsService {
 
     // Auto-close: end the session once the student reaches the limit (if enabled).
     let autoClosed = false;
-    if (exam?.autoClose && session?.status !== 'ENDED' && concerningCount >= maxWarnings) {
+    if (exam.autoClose && settings.status !== 'ENDED' && concerningCount >= maxWarnings) {
       await this.prisma.studentSession.update({
         where: { id: sessionId },
         data: { status: 'ENDED', endedAt: new Date(), endedReason: 'AUTO_CLOSED' },
@@ -122,7 +123,7 @@ export class SessionsService {
       concerning: countsNow, // should the student be warned for THIS event?
       concerningCount,
       maxWarnings,
-      notifyStudent: !!exam?.notifyStudent,
+      notifyStudent: exam.notifyStudent,
       autoClosed,
     };
   }
@@ -213,22 +214,18 @@ export class SessionsService {
   ///   DISCONNECTED past the resume window -> ENDED (reason TIMEOUT)
   private lastStaleRun = 0;
   async expireStale() {
-    if (Date.now() - this.lastStaleRun < 15_000) return; // throttle: polled ~5s, sweep ~15s
+    if (Date.now() - this.lastStaleRun < STALE_SWEEP_THROTTLE_MS) return;
     this.lastStaleRun = Date.now();
     const now = Date.now();
     const staleCutoff = new Date(now - STALE_TIMEOUT_MS);
     const graceCutoff = new Date(now - RESUME_WINDOW_MS);
 
-    const stale = await this.prisma.studentSession.findMany({
-      where: { status: 'ACTIVE', lastSeenAt: { lt: staleCutoff } },
-      select: { id: true, lastSeenAt: true },
-    });
-    for (const s of stale) {
-      await this.prisma.studentSession.update({
-        where: { id: s.id },
-        data: { status: 'DISCONNECTED', disconnectedAt: s.lastSeenAt },
-      });
-    }
+    // One statement for all stale sessions (disconnectedAt = their own lastSeenAt,
+    // which Prisma's updateMany can't express per row).
+    await this.prisma.$executeRaw`
+      UPDATE "StudentSession"
+      SET "status" = 'DISCONNECTED', "disconnectedAt" = "lastSeenAt"
+      WHERE "status" = 'ACTIVE' AND "lastSeenAt" < ${staleCutoff}`;
 
     await this.prisma.studentSession.updateMany({
       where: { status: 'DISCONNECTED', disconnectedAt: { lt: graceCutoff } },

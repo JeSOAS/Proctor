@@ -60,7 +60,7 @@ const fmtGap = (sec: number) => {
 
 /// "2026-09-17 09:20:05" in the given IANA time zone (spreadsheets parse it as
 /// a date-time). Falls back to UTC for a missing/unknown zone.
-export function timeFormatter(tz?: string) {
+function timeFormatter(tz?: string) {
   let zone = 'UTC';
   if (tz) {
     try {
@@ -172,7 +172,6 @@ export function buildSummaryCsv(
   rows: {
     studentName: string;
     studentId: string | null;
-    status: string;
     startedAt: Date;
     endedAt: Date | null;
     endedReason: string | null;
