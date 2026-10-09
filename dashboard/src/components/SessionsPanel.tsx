@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
 import {
   AttentionBadges,
@@ -15,6 +15,7 @@ import {
   endedReasonLabel,
   eventHelp,
   eventLabel,
+  fmtDur,
 } from '../ui';
 import { ExamSettings } from './ExamSettings';
 
@@ -32,16 +33,9 @@ const range = (a?: string, b?: string) => {
   if (!s && !e) return '—';
   return `${s || '—'} → ${e || 'ongoing'}`;
 };
-const fmtGap = (sec?: number) => {
-  if (sec == null) return '';
-  if (sec < 60) return `${sec}s`;
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return s ? `${m}m ${s}s` : `${m}m`;
-};
-
 type LogRow = {
   key: string;
+  at: number; // ms timestamp, for ordering
   label: string;
   time: string;
   detail: string; // full URL for tab activity (shown in full, on purpose)
@@ -54,33 +48,33 @@ type LogRow = {
 // Turn raw events into readable rows: merge each window blur with the focus that
 // follows it into one "Away from Chrome for X" line, label everything in plain
 // English, keep the full URL for tab activity, and carry the flags for display.
+// Rows are sorted by time: an "away" row is only known when the student returns,
+// but belongs at the moment they left. (Mirrored by backend csv-export.ts.)
 function buildLogRows(violations: any[]): LogRow[] {
   const rows: LogRow[] = [];
   let pendingBlur: any = null;
 
-  const away = (blur: any, secs?: number) =>
-    rows.push({
-      key: `away-${blur.id}`,
-      label: secs == null ? 'Left Chrome (did not return)' : `Away from Chrome for ${fmtGap(secs)}`,
-      time: new Date(blur.occurredAt).toLocaleTimeString(),
-      detail: blur.url || '',
-      help: eventHelp('WINDOW_BLUR'),
-      concerning: !!blur.concerning,
-      postSubmission: !!blur.postSubmission,
-      tone: 'plain',
-    });
-
-  const push = (v: any, detail: string, tone: LogRow['tone']) =>
+  const push = (v: any, detail: string, tone: LogRow['tone'], label = eventLabel(v.type), help = eventHelp(v.type)) =>
     rows.push({
       key: String(v.id),
-      label: eventLabel(v.type),
+      at: new Date(v.occurredAt).getTime(),
+      label,
       time: new Date(v.occurredAt).toLocaleTimeString(),
       detail,
-      help: eventHelp(v.type),
+      help,
       concerning: !!v.concerning,
       postSubmission: !!v.postSubmission,
       tone,
     });
+
+  const away = (blur: any, secs?: number) =>
+    push(
+      blur,
+      blur.url || '',
+      'plain',
+      secs == null ? 'Left Chrome (did not return)' : `Away from Chrome for ${fmtDur(secs)}`,
+      eventHelp('WINDOW_BLUR'),
+    );
 
   for (const v of violations) {
     switch (v.type) {
@@ -110,43 +104,23 @@ function buildLogRows(violations: any[]): LogRow[] {
         break;
       case 'LONG_DISCONNECT':
       case 'RECONNECT':
-        push(v, v.payload?.seconds != null ? `offline ${fmtGap(v.payload.seconds)}` : '', 'plain');
+        push(v, v.payload?.seconds != null ? `offline ${fmtDur(v.payload.seconds)}` : '', 'plain');
         break;
       default:
-        // The extensions page gets a clear label (it's where they'd disable us).
         if (/^(chrome|edge):\/\/extensions/i.test(v.url || '')) {
-          rows.push({
-            key: String(v.id),
-            label: 'Opened extension settings',
-            time: new Date(v.occurredAt).toLocaleTimeString(),
-            detail: v.url || '',
-            help: 'Opened the browser extensions page during the exam — where the extension could be disabled.',
-            concerning: !!v.concerning,
-            postSubmission: !!v.postSubmission,
-            tone: 'plain',
-          });
-          break;
+          push(v, v.url || '', 'plain', 'Opened extension settings',
+            'Opened the browser extensions page during the exam, where the extension could be disabled.');
+        } else if (v.type === 'NEW_WINDOW' && v.payload?.incognito) {
+          push(v, v.url || '', 'plain', 'Opened an incognito window',
+            'The student opened a private (incognito) window during the exam.');
+        } else {
+          // Tab activity + clipboard: the FULL URL, so teachers see exactly which page.
+          push(v, v.url || '', 'plain');
         }
-        if (v.type === 'NEW_WINDOW' && v.payload?.incognito) {
-          rows.push({
-            key: String(v.id),
-            label: 'Opened an incognito window',
-            time: new Date(v.occurredAt).toLocaleTimeString(),
-            detail: v.url || '',
-            help: 'The student opened a private (incognito) window during the exam.',
-            concerning: !!v.concerning,
-            postSubmission: !!v.postSubmission,
-            tone: 'plain',
-          });
-          break;
-        }
-        // Tab activity (navigate/switch/create/close) + clipboard: show the FULL
-        // URL — teachers need to see exactly which page it was.
-        push(v, v.url || '', 'plain');
     }
   }
   if (pendingBlur) away(pendingBlur);
-  return rows;
+  return rows.sort((x, y) => x.at - y.at);
 }
 
 export function SessionsPanel({ exam: navExam }: { exam: any }) {
@@ -245,7 +219,7 @@ export function SessionsPanel({ exam: navExam }: { exam: any }) {
     if (expanded === id) return setExpanded(null);
     setExpanded(id);
     setViolations([]);
-    // Align the page to the student just opened (#4).
+    // Scroll the student just opened into view.
     requestAnimationFrame(() =>
       rowRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
     );
@@ -286,6 +260,9 @@ export function SessionsPanel({ exam: navExam }: { exam: any }) {
       setError(e.message);
     }
   }
+
+  // Rebuilt only when the open log changes (the page re-renders every 5 s poll).
+  const logRows = useMemo(() => buildLogRows(violations), [violations]);
 
   const filtered = sessions.filter((s) =>
     `${s.studentName} ${s.studentId || ''}`.toLowerCase().includes(q.toLowerCase()),
@@ -429,7 +406,7 @@ export function SessionsPanel({ exam: navExam }: { exam: any }) {
                   <p className="text-xs text-gray-400 dark:text-gray-500 py-1">No events recorded.</p>
                 )}
                 <ul className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {buildLogRows(violations).map((row) => (
+                  {logRows.map((row) => (
                     <li
                       key={row.key}
                       className={`py-2 flex items-start gap-3 text-sm ${row.postSubmission ? 'opacity-60' : ''}`}

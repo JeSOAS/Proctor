@@ -13,7 +13,7 @@ NestJS API that receives and stores monitoring events from the Chrome extension.
 `Teacher → Course → Exam → StudentSession → Violation`
 
 - **Teacher** — an instructor account (login); owns courses.
-- **Course** — a course a teacher runs (`subject` is a label).
+- **Course** — a course a teacher runs (name, year, section).
 - **Exam** — an exam in a course; has a unique `joinCode`.
 - **StudentSession** — one student's participation in an exam (created on register).
 - **Violation** — a monitoring event belonging to a StudentSession.
@@ -61,7 +61,7 @@ The instructor dashboard at **`/dashboard`** is the primary UI; these endpoints 
 
 | Method & path | Purpose |
 |---|---|
-| `POST /courses` | create `{ name, subject? }` |
+| `POST /courses` | create `{ name, year?, section? }` |
 | `GET /courses` | list your courses |
 | `GET /courses/:id` · `PATCH /courses/:id` · `DELETE /courses/:id` | read / update / delete |
 
@@ -69,10 +69,12 @@ The instructor dashboard at **`/dashboard`** is the primary UI; these endpoints 
 
 | Method & path | Purpose |
 |---|---|
-| `POST /exams` | create `{ courseId, title, maxWarnings? }` → `{ id, joinCode, ... }` |
+| `POST /exams` | create `{ courseId, title, examLink, maxWarnings?, expectedStudents?, startsAt?, endsAt? }` → `{ id, joinCode, ... }` |
 | `GET /exams` | list your exams |
-| `GET /exams/:id` | one exam (auto-ends stale sessions) |
-| `GET /exams/:id/sessions` | students in an exam, with violation counts |
+| `GET /exams/:id` | one exam |
+| `PATCH /exams/:id` | settings `{ maxWarnings, disconnectGraceSec, awayGraceSec, autoClose, notifyStudent, expectedStudents, examLink }` |
+| `GET /exams/:id/sessions` | students in an exam, with violation counts and flags |
+| `GET /exams/:id/export?view=summary\|log&tz=<zone>` | CSV: per-student summary or full event log |
 | `POST /exams/:id/status` | set status `{ status: OPEN \| CLOSED \| DRAFT }` |
 | `DELETE /exams/:id` | delete one exam |
 | `DELETE /exams` | 🔑 **dev wipe** — all exams/sessions/violations |
@@ -82,12 +84,19 @@ The instructor dashboard at **`/dashboard`** is the primary UI; these endpoints 
 | Method & path | Purpose |
 |---|---|
 | `GET /health` | liveness check (open) |
-| `POST /exams/:code/register` | student joins `{ studentName, studentId? }` → `{ sessionId, ... }` (open) |
+| `POST /exams/:code/register` | student joins `{ studentName, studentId, extensionVersion }` → `{ sessionId, examTitle, examLink }` (open) |
 | `POST /sessions/:id/heartbeat` | extension keep-alive, every 30s (open) |
 | `POST /sessions/:id/violations` | record an event (open) |
 | `POST /sessions/:id/end` | mark a session ENDED (open) |
 | `GET /sessions/:id` · `GET /sessions/:id/violations` | 🎫 read a session / its events |
 | `PATCH /sessions/:id` · `DELETE /sessions/:id` | 🎫 update / delete a session |
+
+**Webhooks** (shared secret `WEBHOOK_SECRET`, used by the Google Forms Apps Script)
+
+| Method & path | Purpose |
+|---|---|
+| `GET /webhooks/forms` | form tokens the script should watch |
+| `POST /webhooks/form-submit` | a form was submitted → `SUBMISSION_CONFIRMED` on the student's session |
 
 Auth legend: 🔑 = `x-admin-token` header (`ADMIN_TOKEN`); 🎫 = teacher token
 (`Authorization: Bearer <token>` from `/auth/login`); open = no credential (the
@@ -99,31 +108,11 @@ returns 409. There is no anonymous session creation — every session belongs to
 an exam. Writing to an ended/unknown session returns 404 so the extension knows
 to re-register.
 
-Sessions whose heartbeat is older than 90 s are automatically marked ENDED when
-listed — Chrome kills the extension's service worker on browser close without
-any event to report from, so "the beats stopped" is how we detect it.
-
-### Known limitation — unstable internet (fine locally, must be fixed before real use)
-
-The heartbeat cannot distinguish "browser closed" from "network dropped". On a
-connection outage longer than 90 s:
-
-1. the session is falsely marked ENDED and a new one is created on reconnect
-   (one student's exam splits into several sessions);
-2. worse, every event during the outage is **dropped** — `report()` in
-   `background.js` currently just logs "event lost".
-
-Everything runs on localhost for now, so neither can happen. Before the
-extension talks to a remote server, the connected phase needs:
-
-- **Offline buffering**: queue unsent events in `chrome.storage.local` and
-  flush on reconnect. Violations already carry a client-side `occurredAt`, so
-  late-delivered events still land at the correct time in the log.
-- **A `DISCONNECTED` status** distinct from `ENDED`, so the dashboard shows
-  "connection lost" (itself suspicious) instead of "exam finished".
-- Longer term, Socket.IO presence (planned for the real-time phase) replaces
-  heartbeat inference with instant connect/disconnect events, including
-  reconnect handling.
+Session lifecycle: no heartbeat for 90 s → `DISCONNECTED`; a heartbeat within
+10 minutes resumes the same session (the gap is logged); otherwise it ends as
+`TIMEOUT`. Events recorded while offline are buffered by the extension and sent
+on reconnect. Exams close automatically at their end time (30 s server timer).
+Full details: [../docs/MONITORING.md](../docs/MONITORING.md).
 
 ## Clearing recorded data
 

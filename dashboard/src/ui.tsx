@@ -150,7 +150,8 @@ export function TimingBadges({ late, early }: { late?: boolean; early?: boolean 
   );
 }
 
-function fmtDur(sec: number): string {
+/// 45s / 3m / 3m 20s
+export function fmtDur(sec: number): string {
   if (sec < 60) return `${sec}s`;
   const m = Math.floor(sec / 60);
   const s = sec % 60;
