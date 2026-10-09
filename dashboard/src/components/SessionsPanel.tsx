@@ -19,6 +19,12 @@ import {
 import { ExamSettings } from './ExamSettings';
 
 const fmt = (d?: string) => (d ? new Date(d).toLocaleString() : null);
+
+// Extension version the student joined with (sent since 1.2.2).
+const extVersion = (ua?: string | null) => {
+  const m = /Proctor\/([\d.]+)/.exec(ua || '');
+  return m ? `ext ${m[1]}` : 'ext ≤1.2.1';
+};
 const time = (d?: string) => (d ? new Date(d).toLocaleTimeString() : null);
 const range = (a?: string, b?: string) => {
   const s = fmt(a);
@@ -379,7 +385,7 @@ export function SessionsPanel({ exam: navExam }: { exam: any }) {
                   />
                 </div>
                 <div className="text-xs text-gray-500 dark:text-gray-400">
-                  {s.studentId || 'no ID'} · joined {time(s.startedAt)}
+                  {s.studentId || 'no ID'} · {extVersion(s.userAgent)} · joined {time(s.startedAt)}
                   {s.endedAt && <> · {endedReasonLabel(s.endedReason)} {time(s.endedAt)}</>}
                   {' '}· seen {time(s.lastSeenAt)} · {s._count?.violations ?? 0} event(s)
                 </div>

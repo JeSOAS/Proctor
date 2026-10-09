@@ -133,6 +133,20 @@ Labels live in `backend/src/exams/csv-export.ts`, copied from the dashboard's
   tunnel). Defaults: `THROTTLE_LIMIT=100` requests per `THROTTLE_TTL_MS=10000`.
   If many students share one NAT IP and get throttled, raise `THROTTLE_LIMIT`.
 
+## 7b. Extension updates
+
+- The Chrome Web Store updates the extension in the background (every few
+  hours, or when Chrome restarts).
+- On **Join**, the extension asks Chrome for an update first; if one is ready it
+  installs and reloads, and the student joins again. An update arriving during
+  an exam is applied after the student finishes (monitoring isn't interrupted).
+- **Minimum version:** set `MIN_EXTENSION_VERSION` (e.g. `1.2.2`) in
+  `docker/.env` and redeploy; older extensions are refused at join with
+  instructions to restart Chrome. Extensions before 1.2.2 send no version and
+  count as older. Blank = no gate.
+- The dashboard shows each student's extension version (`ext 1.2.2`,
+  `ext ≤1.2.1` for older ones).
+
 ## 8. Tuning knobs
 
 - Domains: `backend/allowed-domains.txt`, `backend/ai-domains.txt`.

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
   Injectable,
   Logger,
   NotFoundException,
@@ -44,6 +45,20 @@ const LIVE_SESSION_MS = 90_000;
 // student ID matches no session (see webhooks.service). Not a real join.
 export const NO_SESSION = 'NO_SESSION';
 const NOT_PLACEHOLDER = { OR: [{ endedReason: null }, { endedReason: { not: NO_SESSION } }] };
+
+// Extension version gate: MIN_EXTENSION_VERSION (env, e.g. "1.2.2") refuses joins
+// from older extensions with instructions to update. Unset = no gate. Versions
+// before 1.2.2 send no version at all and are treated as older.
+const versionParts = (v: string) => v.split('.').map((n) => parseInt(n, 10) || 0);
+function olderThan(v: string, min: string): boolean {
+  const a = versionParts(v), b = versionParts(min);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) < (b[i] ?? 0);
+  }
+  return false;
+}
+// The stored user agent carries " Proctor/<version>"; compare browsers without it.
+const baseUa = (ua?: string | null) => (ua || '').replace(/ Proctor\/[\d.]+$/, '');
 
 // Names are compared loosely (case, spacing) so "john  smith" == "John Smith".
 const sameName = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -303,9 +318,26 @@ export class ExamsService implements OnModuleInit, OnModuleDestroy {
   /// Student registration (open — the extension calls this, no teacher auth).
   async register(
     joinCode: string,
-    input: { studentName?: string; studentId?: string },
-    userAgent?: string,
+    input: { studentName?: string; studentId?: string; extensionVersion?: string },
+    browserAgent?: string,
   ) {
+    const version = typeof input.extensionVersion === 'string' ? input.extensionVersion.trim() : '';
+    const minVersion = process.env.MIN_EXTENSION_VERSION?.trim();
+    if (minVersion && (!version || olderThan(version, minVersion))) {
+      throw new HttpException(
+        {
+          statusCode: 426,
+          error: 'Upgrade Required',
+          message:
+            `Your Proctor extension is out of date${version ? ` (version ${version})` : ''}. ` +
+            `Version ${minVersion} or newer is required: close all Chrome windows and reopen Chrome ` +
+            'so it can update, then join again.',
+        },
+        426,
+      );
+    }
+    // Shown to the teacher on the dashboard (which extension version joined).
+    const userAgent = version ? `${browserAgent ?? ''} Proctor/${version}`.trim() : browserAgent;
     if (!input.studentName || !input.studentName.trim()) {
       throw new BadRequestException('"studentName" is required');
     }
@@ -364,7 +396,7 @@ export class ExamsService implements OnModuleInit, OnModuleDestroy {
       // leave a trace on the existing session for the instructor.
       const live =
         existing.status === 'ACTIVE' && now.getTime() - existing.lastSeenAt.getTime() < LIVE_SESSION_MS;
-      if (live && (nameDiffers || (existing.userAgent && userAgent && existing.userAgent !== userAgent))) {
+      if (live && (nameDiffers || (existing.userAgent && userAgent && baseUa(existing.userAgent) !== baseUa(userAgent)))) {
         await this.prisma.violation.create({
           data: {
             sessionId: existing.id,

@@ -129,6 +129,12 @@ State these plainly so results aren't misread:
 - [ ] Set *Away from Chrome allowed* to 60 s mid-exam → earlier 30–59 s absences stop counting; the student's count, badges and both CSV exports update on the next refresh.
 - [ ] Service-worker console (`chrome://extensions` → Proctor → service worker) shows "warning shown on page" for each warning.
 
+## 12. Updates
+
+- [ ] `MIN_EXTENSION_VERSION` unset → any version can join.
+- [ ] Set `MIN_EXTENSION_VERSION=1.2.2`, redeploy → joining with 1.2.1 shows "Your Proctor extension is out of date… reopen Chrome"; 1.2.2 joins normally.
+- [ ] Dashboard shows `ext 1.2.2` (or `ext ≤1.2.1`) next to each student.
+
 ## Not built — do NOT expect these in the mock
 
 - **Auto-submitting** the form on the warning limit — the session closes instead ("Reached warning limit").

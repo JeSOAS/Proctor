@@ -36,7 +36,24 @@ async function getEnrollment() {
 async function clearEnrollment() {
   await chrome.storage.local.remove(['enrollment', 'examStartedReported']);
   console.log('[Proctor/bg] enrollment cleared — monitoring stopped');
+  // An update that arrived during the exam is applied now that it's over.
+  const { updatePending } = await chrome.storage.local.get('updatePending');
+  if (updatePending) {
+    await chrome.storage.local.remove('updatePending');
+    chrome.runtime.reload();
+  }
 }
+
+// ---------- Updates ----------
+//
+// The Web Store delivers new versions in the background. Apply one right away
+// when no exam is running; during an exam, wait until the student finishes so
+// monitoring isn't interrupted.
+chrome.runtime.onUpdateAvailable.addListener(async (details) => {
+  console.log('[Proctor/bg] update available:', details.version);
+  if (await getEnrollment()) await chrome.storage.local.set({ updatePending: true });
+  else chrome.runtime.reload();
+});
 
 // ---------- Exam-start detection ----------
 //

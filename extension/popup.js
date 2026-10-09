@@ -43,12 +43,25 @@ async function join() {
 
   $('join').disabled = true;
   $('join').textContent = 'Joining…';
+  // Make sure the newest version is running before the exam starts: if Chrome
+  // has an update ready, install it now (the extension reloads and this popup
+  // closes — the student opens it again and joins).
+  try {
+    const { status } = await chrome.runtime.requestUpdateCheck();
+    if (status === 'update_available') {
+      $('error').textContent = 'Updating Proctor… open this window again in a few seconds and join.';
+      setTimeout(() => chrome.runtime.reload(), 1500);
+      return;
+    }
+  } catch (_) {
+    /* throttled / offline — continue with the installed version */
+  }
   try {
     const base = await apiBase();
     const res = await fetch(`${base}/exams/${code}/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ studentName, studentId }),
+      body: JSON.stringify({ studentName, studentId, extensionVersion: chrome.runtime.getManifest().version }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {

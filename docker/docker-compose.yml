@@ -44,6 +44,11 @@ services:
       # Shared secret for the Google Forms submission webhook (optional — the
       # webhook rejects everything if unset). Must match the Apps Script.
       WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
+      # Refuse joins from extensions older than this (e.g. 1.2.2). Blank = off.
+      MIN_EXTENSION_VERSION: ${MIN_EXTENSION_VERSION:-}
+      # Rate limiting on the open student endpoints (blank = built-in defaults).
+      THROTTLE_LIMIT: ${THROTTLE_LIMIT:-}
+      THROTTLE_TTL_MS: ${THROTTLE_TTL_MS:-}
     depends_on:
       db:
         condition: service_healthy
