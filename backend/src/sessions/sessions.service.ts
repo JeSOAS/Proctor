@@ -63,7 +63,7 @@ export class SessionsService {
       select: {
         status: true,
         exam: {
-          select: { examLink: true, maxWarnings: true, autoClose: true, notifyStudent: true },
+          select: { examLink: true, awayGraceSec: true, maxWarnings: true, autoClose: true, notifyStudent: true },
         },
       },
     });
@@ -78,7 +78,7 @@ export class SessionsService {
       orderBy: { occurredAt: 'asc' },
     });
     const session = settings;
-    const r = classify(events, { examLink: exam?.examLink });
+    const r = classify(events, { examLink: exam?.examLink, awayGraceSec: exam?.awayGraceSec });
     const maxWarnings = exam?.maxWarnings ?? 3;
 
     // Leaving Chrome (WINDOW_BLUR) only counts if the student stays away >= 30 s,
@@ -128,13 +128,13 @@ export class SessionsService {
       }),
       this.prisma.studentSession.findUnique({
         where: { id: sessionId },
-        select: { exam: { select: { examLink: true } } },
+        select: { exam: { select: { examLink: true, awayGraceSec: true } } },
       }),
     ]);
     // Annotate each row with whether it counts as a warning and whether it
     // happened after submission, using the same classifier (and exam link) as
     // the count — so the dashboard mirrors it exactly.
-    const r = classify(violations, { examLink: session?.exam?.examLink });
+    const r = classify(violations, { examLink: session?.exam?.examLink, awayGraceSec: session?.exam?.awayGraceSec });
     return violations.map((v) => ({
       ...v,
       payload: v.payload ? JSON.parse(v.payload) : null,

@@ -54,6 +54,7 @@ model Exam {
   /// A disconnect gap at least this long (seconds) counts as a warning; shorter
   /// drops are recorded but not counted. Configurable per exam.
   disconnectGraceSec Int       @default(180)
+  awayGraceSec Int             @default(30) // leaving Chrome shorter than this is not a violation
   /// Toggle: end (auto-close) a student's session once they hit maxWarnings.
   autoClose   Boolean          @default(false)
   /// Toggle: let the extension warn the student on violations (requires an

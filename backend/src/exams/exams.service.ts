@@ -173,7 +173,7 @@ export class ExamsService implements OnModuleInit, OnModuleDestroy {
       else bySession.set(e.sessionId, [e]);
     }
     return sessions.map((s) => {
-      const r = classify(bySession.get(s.id) ?? [], { examLink: exam.examLink });
+      const r = classify(bySession.get(s.id) ?? [], { examLink: exam.examLink, awayGraceSec: exam.awayGraceSec });
       const startedLate =
         !!exam.startsAt &&
         !!r.examStartedAt &&
@@ -218,7 +218,7 @@ export class ExamsService implements OnModuleInit, OnModuleDestroy {
       orderBy: { startedAt: 'asc' },
       include: { violations: { orderBy: { occurredAt: 'asc' } } },
     });
-    return { filename: `${base} - full log.csv`, csv: buildLogCsv(sessions, exam.examLink, tz) };
+    return { filename: `${base} - full log.csv`, csv: buildLogCsv(sessions, { examLink: exam.examLink, awayGraceSec: exam.awayGraceSec }, tz) };
   }
 
   async setStatus(teacherId: string, id: string, status: string) {
@@ -255,6 +255,7 @@ export class ExamsService implements OnModuleInit, OnModuleDestroy {
     input: {
       maxWarnings?: number;
       disconnectGraceSec?: number;
+      awayGraceSec?: number;
       autoClose?: boolean;
       notifyStudent?: boolean;
       expectedStudents?: number;
@@ -265,6 +266,7 @@ export class ExamsService implements OnModuleInit, OnModuleDestroy {
     const data: {
       maxWarnings?: number;
       disconnectGraceSec?: number;
+      awayGraceSec?: number;
       autoClose?: boolean;
       notifyStudent?: boolean;
       expectedStudents?: number | null;
@@ -283,6 +285,12 @@ export class ExamsService implements OnModuleInit, OnModuleDestroy {
         throw new BadRequestException('disconnectGraceSec must be >= 0');
       }
       data.disconnectGraceSec = Math.floor(input.disconnectGraceSec);
+    }
+    if (typeof input.awayGraceSec === 'number') {
+      if (input.awayGraceSec < 0 || input.awayGraceSec > 3600) {
+        throw new BadRequestException('awayGraceSec must be between 0 and 3600');
+      }
+      data.awayGraceSec = Math.floor(input.awayGraceSec);
     }
     if (typeof input.autoClose === 'boolean') data.autoClose = input.autoClose;
     if (typeof input.notifyStudent === 'boolean') data.notifyStudent = input.notifyStudent;

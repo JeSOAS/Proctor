@@ -136,10 +136,13 @@ Labels live in `backend/src/exams/csv-export.ts`, copied from the dashboard's
 ## 8. Tuning knobs
 
 - Domains: `backend/allowed-domains.txt`, `backend/ai-domains.txt`.
-- Thresholds (`backend/src/common/concerning.ts`): `CONCERNING_BLUR_MS` (30 s),
+- Away-from-Chrome allowance: per exam in the dashboard (*Away from Chrome allowed*,
+  `Exam.awayGraceSec`, default 30 s). Changing it re-evaluates all recorded events
+  (counts are computed at read time); warnings already shown / auto-closes are not undone.
+- Thresholds (`backend/src/common/concerning.ts`): `CONCERNING_BLUR_MS` (30 s default),
   the ≥ 60 s unaccounted badge, the > 2 reconnect badge.
 - Idle interval: `IDLE_SECONDS` in `extension/background.js` (120 s).
-- Per-exam settings (dashboard): max warnings, disconnect grace, notify,
+- Per-exam settings (dashboard): max warnings, disconnect grace, away-from-Chrome allowance, notify,
   auto-close, exam link, expected students, start/end times.
 - Rate limit: `THROTTLE_LIMIT`, `THROTTLE_TTL_MS`.
 - Exam expiry (`backend/src/exams/exams.service.ts`): `EXPIRY_SWEEP_MS` (30 s

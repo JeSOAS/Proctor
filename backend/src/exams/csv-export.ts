@@ -105,12 +105,16 @@ const parsePayload = (p: string | null): any => {
 
 /// Full log: one readable row per event, framed by "Joined" / "Ended" rows,
 /// with window blur+focus merged into "Away from Chrome for …" as on screen.
-export function buildLogCsv(sessions: SessionWithEvents[], examLink: string | null, tz?: string): string {
+export function buildLogCsv(
+  sessions: SessionWithEvents[],
+  opts: { examLink: string | null; awayGraceSec?: number | null },
+  tz?: string,
+): string {
   const { zone, fmt } = timeFormatter(tz);
   const rows: unknown[][] = [[`Time (${zone})`, 'Student', 'Student ID', 'Event', 'Details', 'Counts as violation']];
   for (const s of sessions) {
     const who = [s.studentName, s.studentId ?? ''];
-    const r = classify(s.violations, { examLink });
+    const r = classify(s.violations, opts);
     const counts = (id: number) =>
       r.concerning.has(id) ? 'Yes' : r.postSubmission.has(id) ? 'No (after submitting)' : 'No';
     // Collected per student and sorted by time before writing: a merged "Away

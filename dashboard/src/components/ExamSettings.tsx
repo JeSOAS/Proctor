@@ -18,6 +18,7 @@ export function ExamSettings({
   const [open, setOpen] = useState(false);
   const [max, setMax] = useState<number>(exam.maxWarnings ?? 3);
   const [graceSec, setGraceSec] = useState<number>(exam.disconnectGraceSec ?? 180);
+  const [awaySec, setAwaySec] = useState<number>(exam.awayGraceSec ?? 30);
   const [expected, setExpected] = useState<string>(
     typeof exam.expectedStudents === 'number' ? String(exam.expectedStudents) : '',
   );
@@ -34,6 +35,7 @@ export function ExamSettings({
       const updated = await api.updateExam(exam.id, {
         maxWarnings: max,
         disconnectGraceSec: graceSec,
+        awayGraceSec: awaySec,
         notifyStudent: notify,
         autoClose,
         expectedStudents: expected === '' ? null : Number(expected),
@@ -73,6 +75,13 @@ export function ExamSettings({
                 <HelpIcon text="A disconnect shorter than this is recorded but NOT counted as a warning; longer gaps count." />
               </span>
               <input type="number" min={0} value={graceSec} onChange={(e) => setGraceSec(Number(e.target.value))} className={numInput} />
+            </label>
+            <label className="inline-flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 text-gray-600 dark:text-gray-300">
+                Away from Chrome allowed (sec)
+                <HelpIcon text="Leaving Chrome (another app, Alt-Tab) for less than this is recorded but not counted. Changing it re-evaluates every event already recorded in this exam, so counts, badges and exports update right away. Warnings already shown and sessions already auto-closed are not undone." />
+              </span>
+              <input type="number" min={0} max={3600} value={awaySec} onChange={(e) => setAwaySec(Number(e.target.value))} className={numInput} />
             </label>
             <label className="inline-flex items-center gap-2">
               <span className="inline-flex items-center gap-1 text-gray-600 dark:text-gray-300">

@@ -4,7 +4,7 @@ import { DomainRule, isAiHost, isAllowedUrl, ruleMatches } from './allowed-domai
 // counts as a warning only if they stayed away at least this long. Shorter
 // blurs are recorded but not counted — leaving the window for a few seconds
 // isn't evidence of cheating. (Policy chosen with the user: "count only if long".)
-const CONCERNING_BLUR_MS = 30_000;
+const CONCERNING_BLUR_MS = 30_000; // default; each exam can override (Exam.awayGraceSec)
 
 // The browser's own extensions page — where the student would go to disable
 // this extension. Navigating here during an exam is a tampering-intent signal
@@ -129,9 +129,12 @@ function examLinkRule(examLink: string | null | undefined): DomainRule | null {
  */
 export function classify(
   events: ClassifiableEvent[],
-  opts: { examLink?: string | null } = {},
+  opts: { examLink?: string | null; awayGraceSec?: number | null } = {},
 ): ClassifyResult {
   const examRule = examLinkRule(opts.examLink);
+  // Computed at read time, so changing an exam's allowance mid-exam re-evaluates
+  // every event already recorded.
+  const blurMs = typeof opts.awayGraceSec === 'number' ? opts.awayGraceSec * 1000 : CONCERNING_BLUR_MS;
   const concerning = new Set<number>();
   const postSubmission = new Set<number>();
   let aiUsed = false;
@@ -189,7 +192,7 @@ export function classify(
       case 'WINDOW_FOCUS':
         if (pendingBlur) {
           const away = ev.occurredAt.getTime() - pendingBlur.occurredAt.getTime();
-          if (away >= CONCERNING_BLUR_MS) flag(pendingBlur.id);
+          if (away >= blurMs) flag(pendingBlur.id);
           pendingBlur = null;
         }
         break;
@@ -272,7 +275,7 @@ export function classify(
 /** Backwards-compatible helper: just the set of concerning event ids. */
 export function concerningIds(
   events: ClassifiableEvent[],
-  opts: { examLink?: string | null } = {},
+  opts: { examLink?: string | null; awayGraceSec?: number | null } = {},
 ): Set<number> {
   return classify(events, opts).concerning;
 }

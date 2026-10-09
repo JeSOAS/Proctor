@@ -126,6 +126,7 @@ State these plainly so results aren't misread:
 - [ ] Alt-Tab away for **30 s or more** and back → banner appears on return ("Warning N of M").
 - [ ] Open a **second Chrome window** with chatgpt.com, switch to it with Alt-Tab / the taskbar → a "Switched browser tab" violation with the ChatGPT URL, and a banner.
 - [ ] Switch back to the exam window → recorded, not counted.
+- [ ] Set *Away from Chrome allowed* to 60 s mid-exam → earlier 30–59 s absences stop counting; the student's count, badges and both CSV exports update on the next refresh.
 - [ ] Service-worker console (`chrome://extensions` → Proctor → service worker) shows "warning shown on page" for each warning.
 
 ## Not built — do NOT expect these in the mock
