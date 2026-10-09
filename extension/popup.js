@@ -18,11 +18,27 @@ async function apiBase() {
   return apiBase || DEFAULT_API_BASE;
 }
 
+// Only open http(s) links the teacher configured as the exam link.
+function safeLink(url) {
+  return typeof url === 'string' && /^https?:\/\//i.test(url) ? url : null;
+}
+
+function openExam() {
+  chrome.storage.local.get('enrollment').then(({ enrollment }) => {
+    const link = safeLink(enrollment && enrollment.examLink);
+    if (link) chrome.tabs.create({ url: link });
+  });
+}
+
 async function render() {
   const { enrollment } = await chrome.storage.local.get('enrollment');
   if (enrollment) {
     $('a-exam').textContent = enrollment.examTitle;
     $('a-student').textContent = enrollment.studentName;
+    const link = safeLink(enrollment.examLink);
+    $('a-link').textContent = link || '';
+    $('a-link-row').classList.toggle('hidden', !link);
+    $('open-exam').classList.toggle('hidden', !link);
     $('join-view').classList.add('hidden');
     $('active-view').classList.remove('hidden');
   } else {
@@ -40,6 +56,19 @@ async function join() {
   if (!studentName) return ($('error').textContent = 'Enter your name.');
   if (!studentId) return ($('error').textContent = 'Enter your student ID.');
   if (!code) return ($('error').textContent = 'Enter the join code.');
+
+  // Monitoring must cover incognito windows too, otherwise a student could look
+  // things up there unseen. Extensions can't enable this themselves; the
+  // student turns on "Allow in Incognito" once.
+  let incognitoOk = true;
+  try {
+    incognitoOk = await chrome.extension.isAllowedIncognitoAccess();
+  } catch (_) {}
+  $('incognito-help').classList.toggle('hidden', incognitoOk);
+  if (!incognitoOk) {
+    $('error').textContent = 'Allow Proctor in incognito to join.';
+    return;
+  }
 
   $('join').disabled = true;
   $('join').textContent = 'Joining…';
@@ -84,6 +113,9 @@ async function join() {
     // Wake the worker so monitoring + heartbeat start right away
     chrome.runtime.sendMessage({ type: '__proctor_enrolled' }).catch(() => {});
     await render();
+    // Take the student straight to the exam (this closes the popup).
+    const link = safeLink(data.examLink);
+    if (link) chrome.tabs.create({ url: link });
   } catch (err) {
     $('error').textContent = err.message;
   } finally {
@@ -107,6 +139,10 @@ async function leave() {
 }
 
 $('join').addEventListener('click', join);
+$('open-exam').addEventListener('click', openExam);
+$('open-settings').addEventListener('click', () =>
+  chrome.tabs.create({ url: `chrome://extensions/?id=${chrome.runtime.id}` }),
+);
 $('code').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') join();
 });

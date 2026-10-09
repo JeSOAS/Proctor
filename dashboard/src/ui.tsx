@@ -237,6 +237,7 @@ const EVENT_LABELS: Record<string, string> = {
   SUBMISSION_CONFIRMED: 'Submission confirmed (form)',
   ID_CONFLICT: 'Someone else tried to join with this ID',
   NAME_MISMATCH: 'Re-joined with a different name',
+  INCOGNITO_DISABLED: 'Turned off Proctor in incognito',
 };
 export function eventLabel(type: string): string {
   return EVENT_LABELS[type] || type;
@@ -264,6 +265,8 @@ const EVENT_HELP: Record<string, string> = {
   ID_CONFLICT:
     'While this student was online, another join attempt used the same student ID with a different name or browser. It was refused.',
   NAME_MISMATCH: 'This ID was used to re-join under a different name. The original name was kept.',
+  INCOGNITO_DISABLED:
+    'The student switched off "Allow in Incognito" for Proctor during the exam, so incognito windows were no longer monitored.',
 };
 export function eventHelp(type: string): string {
   return EVENT_HELP[type] || 'Recorded activity.';

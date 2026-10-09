@@ -63,6 +63,9 @@
     .row { font-size: 12px; margin: 4px 0; }
     .row b { color: #111827; }
     .hidden { display: none; }
+    .notice { font-size: 12px; line-height: 1.45; background: #fef3c7; color: #78350f; border-radius: 6px; padding: 8px 10px; margin-top: 10px; }
+    .notice ol { margin: 4px 0 0 16px; padding: 0; }
+    .link { font-size: 11px; color: #2563eb; word-break: break-all; }
   </style>
 </head>
 <body>
@@ -77,6 +80,15 @@
     <input id="code" type="text" maxlength="6" placeholder="XXXXXX">
     <button id="join">Join exam</button>
     <div id="error" class="error"></div>
+    <div id="incognito-help" class="notice hidden">
+      Proctor must also be allowed in <b>incognito</b> windows before you can join:
+      <ol>
+        <li>Click <b>Open Proctor settings</b> below.</li>
+        <li>Turn on <b>Allow in Incognito</b>.</li>
+        <li>Open this window again and join.</li>
+      </ol>
+      <button id="open-settings" class="secondary">Open Proctor settings</button>
+    </div>
   </div>
 
   <!-- Active view -->
@@ -84,6 +96,8 @@
     <h1><span class="dot live"></span>Monitoring active</h1>
     <div class="row">Exam: <b id="a-exam"></b></div>
     <div class="row">Student: <b id="a-student"></b></div>
+    <div id="a-link-row" class="row hidden">Exam: <a id="a-link" class="link" href="#"></a></div>
+    <button id="open-exam" class="hidden">Open exam</button>
     <p>Your activity is being monitored for academic integrity while this exam is in progress.</p>
     <button id="leave" class="secondary">Leave exam</button>
   </div>

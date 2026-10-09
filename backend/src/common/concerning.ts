@@ -15,6 +15,17 @@ function isTamperPage(url: string | null): boolean {
   return u.startsWith('chrome://extensions') || u.startsWith('edge://extensions');
 }
 
+// Parse an event payload (stored as a JSON string, or already an object).
+function payloadOf(payload: unknown): Record<string, unknown> | null {
+  if (payload == null) return null;
+  try {
+    const p = typeof payload === 'string' ? JSON.parse(payload) : payload;
+    return p && typeof p === 'object' ? (p as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
 // Read the gap seconds from a RECONNECT/LONG_DISCONNECT payload (string or object).
 function gapSeconds(payload: unknown): number {
   if (payload == null) return 0;
@@ -212,9 +223,20 @@ export function classify(
         break;
       }
 
+      case 'INCOGNITO_DISABLED':
+        // Turned off "Allow in Incognito" mid-exam (required to join): the
+        // same tampering intent as opening the extension settings.
+        tamperIntent = true;
+        flag(ev.id);
+        break;
+
       case 'TAB_CREATED':
       case 'NEW_WINDOW':
         noteVisit(ev.url);
+        if (ev.type === 'NEW_WINDOW' && payloadOf(ev.payload)?.incognito === true) {
+          flag(ev.id); // an incognito window during the exam always counts
+          break;
+        }
         // Opening a tab/window is only concerning if it lands somewhere
         // non-allowed. A blank/new one (no URL / chrome://newtab) is benign —
         // the student's later navigation, if any, is judged on its own.

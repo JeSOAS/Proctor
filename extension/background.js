@@ -34,7 +34,7 @@ async function getEnrollment() {
 }
 
 async function clearEnrollment() {
-  await chrome.storage.local.remove(['enrollment', 'examStartedReported']);
+  await chrome.storage.local.remove(['enrollment', 'examStartedReported', 'incognitoReported']);
   console.log('[Proctor/bg] enrollment cleared — monitoring stopped');
   // An update that arrived during the exam is applied now that it's over.
   const { updatePending } = await chrome.storage.local.get('updatePending');
@@ -228,8 +228,26 @@ async function sendHeartbeat() {
 
 chrome.alarms.create('heartbeat', { periodInMinutes: HEARTBEAT_PERIOD_MINUTES });
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === 'heartbeat') sendHeartbeat();
+  if (alarm.name === 'heartbeat') {
+    sendHeartbeat();
+    checkIncognitoAccess();
+  }
 });
+
+// Joining requires "Allow in Incognito". Turning it off restarts the extension,
+// so this check runs on every worker start and heartbeat; it is reported once
+// per exam as tampering.
+async function checkIncognitoAccess() {
+  try {
+    if (await chrome.extension.isAllowedIncognitoAccess()) return;
+    if (!(await getEnrollment())) return;
+    const { incognitoReported } = await chrome.storage.local.get('incognitoReported');
+    if (incognitoReported) return;
+    await chrome.storage.local.set({ incognitoReported: true });
+    report('INCOGNITO_DISABLED', {});
+  } catch (_) {}
+}
+checkIncognitoAccess();
 sendHeartbeat(); // also beat immediately on every worker start
 
 // ---------- Tab URL registry ----------
@@ -305,7 +323,7 @@ chrome.windows.onCreated.addListener(async (win) => {
     const tabs = await chrome.tabs.query({ windowId: win.id });
     url = tabs[0] && (tabs[0].url || tabs[0].pendingUrl);
   } catch (_) {}
-  report('NEW_WINDOW', { windowId: win.id, url });
+  report('NEW_WINDOW', { windowId: win.id, url, incognito: !!win.incognito });
 });
 
 // ---------- Idle detection ----------

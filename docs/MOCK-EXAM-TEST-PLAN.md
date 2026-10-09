@@ -84,7 +84,7 @@ anything unexpected. **Observe results** in the dashboard (exam → click a stud
 ## 9. Evasion attempts / environment quirks
 
 - [ ] Switch to a `chrome://` page (settings/extensions) → `TAB_SWITCH` recorded; but clipboard on `chrome://` pages is **not** caught (content scripts can't run there).
-- [ ] ⚠ Open an **Incognito** window and switch to it → confirm what records (the extension is usually disabled in incognito; the focus change may or may not register). Realistic evasion — worth testing.
+- [ ] Open an **Incognito** window and switch to it → counted ("Opened an incognito window"); since 1.2.2 joining requires incognito access, so activity inside it is monitored too.
 - [ ] Open a different **Chrome profile** window → similar to incognito.
 - [ ] Open **DevTools** → confirm whether it registers as focus loss.
 - [ ] Try to stop the service worker / disable the extension → heartbeats stop → session ENDs. Tampering shows up as a dropped student.
@@ -134,6 +134,14 @@ State these plainly so results aren't misread:
 - [ ] `MIN_EXTENSION_VERSION` unset → any version can join.
 - [ ] Set `MIN_EXTENSION_VERSION=1.2.2`, redeploy → joining with 1.2.1 shows "Your Proctor extension is out of date… reopen Chrome"; 1.2.2 joins normally.
 - [ ] Dashboard shows `ext 1.2.2` (or `ext ≤1.2.1`) next to each student.
+
+## 13. Incognito & exam link (1.2.2)
+
+- [ ] With *Allow in Incognito* **off** → Join is refused with the steps; *Open Proctor settings* opens Proctor's page in chrome://extensions.
+- [ ] Turn it on, join → the exam link opens in a new tab automatically; the popup shows the link and *Open exam*.
+- [ ] During the exam press **Ctrl+Shift+N** → "Opened an incognito window" (counted); searching there is recorded like any window.
+- [ ] Turn *Allow in Incognito* **off** mid-exam → "Turned off Proctor in incognito" (counted) and the 🛠 badge.
+- [ ] Exam without an exam link → no tab opens; no *Open exam* button.
 
 ## Not built — do NOT expect these in the mock
 

@@ -127,6 +127,19 @@ function buildLogRows(violations: any[]): LogRow[] {
           });
           break;
         }
+        if (v.type === 'NEW_WINDOW' && v.payload?.incognito) {
+          rows.push({
+            key: String(v.id),
+            label: 'Opened an incognito window',
+            time: new Date(v.occurredAt).toLocaleTimeString(),
+            detail: v.url || '',
+            help: 'The student opened a private (incognito) window during the exam.',
+            concerning: !!v.concerning,
+            postSubmission: !!v.postSubmission,
+            tone: 'plain',
+          });
+          break;
+        }
         // Tab activity (navigate/switch/create/close) + clipboard: show the FULL
         // URL — teachers need to see exactly which page it was.
         push(v, v.url || '', 'plain');

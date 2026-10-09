@@ -109,6 +109,23 @@ time zone (UTF-8 with BOM so Excel shows non-Latin names):
 Labels live in `backend/src/exams/csv-export.ts`, copied from the dashboard's
 `ui.tsx` — keep the two in sync.
 
+## 5b. Joining (extension 1.2.2+)
+
+- **Incognito access is required.** The popup refuses to join unless Proctor is
+  allowed in incognito (`chrome.extension.isAllowedIncognitoAccess()`), and
+  shows the steps plus an *Open Proctor settings* button
+  (`chrome://extensions/?id=<extension id>` → *Allow in Incognito*). Without it,
+  incognito windows would be invisible to the extension.
+- Switching it off mid-exam restarts the extension; the worker notices on start
+  / heartbeat and reports `INCOGNITO_DISABLED` once ("Turned off Proctor in
+  incognito") — counted, and raises the 🛠 tampering flag.
+- Opening an **incognito window** during the exam (`NEW_WINDOW` with
+  `incognito: true`) always counts ("Opened an incognito window"); what is done
+  inside it is monitored like any other window.
+- **Exam link:** after a successful join the extension opens the exam link in a
+  new tab; the popup's *Monitoring active* view shows the link and an *Open
+  exam* button. Only `http(s)` links are opened.
+
 ## 6. Enforcement & student-facing
 
 - **Fullscreen lock:** on the exam page a blocking overlay requires fullscreen;

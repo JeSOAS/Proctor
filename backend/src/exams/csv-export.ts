@@ -28,6 +28,7 @@ const EVENT_LABELS: Record<string, string> = {
   SUBMISSION_CONFIRMED: 'Submission confirmed (form)',
   ID_CONFLICT: 'Someone else tried to join with this ID',
   NAME_MISMATCH: 'Re-joined with a different name',
+  INCOGNITO_DISABLED: 'Turned off Proctor in incognito',
 };
 const eventLabel = (type: string) => EVENT_LABELS[type] || type;
 
@@ -151,7 +152,10 @@ export function buildLogCsv(
           break;
         default: {
           const ext = /^(chrome|edge):\/\/extensions/i.test(v.url || '');
-          add(v.occurredAt, ext ? 'Opened extension settings' : eventLabel(v.type), v.url || '', counts(v.id));
+          const label = ext ? 'Opened extension settings'
+            : v.type === 'NEW_WINDOW' && payload?.incognito ? 'Opened an incognito window'
+              : eventLabel(v.type);
+          add(v.occurredAt, label, v.url || '', counts(v.id));
         }
       }
     }
