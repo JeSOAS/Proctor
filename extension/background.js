@@ -73,15 +73,33 @@ async function maybeReportExamStarted(url) {
 
 function notify(title, message) {
   try {
-    chrome.notifications.create({
-      type: 'basic',
-      iconUrl: 'icons/icon128.png',
-      title,
-      message,
-      priority: 2,
-    });
-  } catch (_) {
-    /* notifications permission missing or unavailable — ignore */
+    chrome.notifications.create(
+      { type: 'basic', iconUrl: 'icons/icon128.png', title, message, priority: 2 },
+      () => {
+        if (chrome.runtime.lastError) {
+          console.warn('[Proctor/bg] desktop notification failed:', chrome.runtime.lastError.message);
+        }
+      },
+    );
+  } catch (err) {
+    console.warn('[Proctor/bg] desktop notification unavailable:', err.message);
+  }
+}
+
+// Show a warning to the student: as a banner inside the page they're on (works
+// regardless of the OS notification settings) AND as a desktop notification
+// (covers pages where content scripts can't run, e.g. chrome:// pages).
+async function warnStudent(title, message) {
+  notify(title, message);
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    if (tab && tab.id != null) {
+      await chrome.tabs.sendMessage(tab.id, { type: '__proctor_warning', text: `${title}: ${message}` });
+      console.log('[Proctor/bg] warning shown on page:', message);
+    }
+  } catch (err) {
+    // No content script on that page (chrome://, Web Store, not yet loaded).
+    console.log('[Proctor/bg] page banner not available here; desktop notification only:', err.message);
   }
 }
 
@@ -90,12 +108,12 @@ function notify(title, message) {
 async function handleReportResponse(data) {
   if (!data || typeof data !== 'object') return;
   if (data.autoClosed) {
-    notify('Exam monitoring ended', 'You reached the warning limit for this exam.');
+    warnStudent('Exam monitoring ended', 'You reached the warning limit for this exam.');
     await clearEnrollment();
     return;
   }
   if (data.notifyStudent && data.concerning) {
-    notify(
+    warnStudent(
       'Proctor warning',
       `That action was flagged. Warning ${data.concerningCount} of ${data.maxWarnings}.`,
     );

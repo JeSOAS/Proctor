@@ -115,6 +115,15 @@ State these plainly so results aren't misread:
 - [ ] A leaves; the ID is used again with a different name → allowed; A's original name is kept and "✏️ Different name on re-join" appears.
 - [ ] (Webhook configured) a Google Form is submitted with a student ID that never joined → a "Submitted, but no Proctor session with this ID" row appears; it is not counted in "joined".
 
+## 11. Extension 1.2.2
+
+- [ ] Open the exam form first, **then** join in the popup → the fullscreen prompt appears on the already-open exam tab without refreshing.
+- [ ] In fullscreen on the exam, switch to another tab, then back → the prompt appears again ("Continue in fullscreen" / "Finish").
+- [ ] Exam with **Notify students** on: switch to a non-allowed site (e.g. chatgpt.com) → a red "Proctor warning … Warning N of M" banner appears at the top of that page within a couple of seconds.
+- [ ] Same, with Windows notifications for Chrome turned **off** → the banner still appears.
+- [ ] Notify students **off** → no banner, no notification.
+- [ ] Service-worker console (`chrome://extensions` → Proctor → service worker) shows "warning shown on page" for each warning.
+
 ## Not built — do NOT expect these in the mock
 
 - **Auto-submitting** the form on the warning limit — the session closes instead ("Reached warning limit").

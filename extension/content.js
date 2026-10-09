@@ -165,29 +165,56 @@ function finishExam() {
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
 }
 
+// The enrollment is read from storage and kept current, so the lock also works
+// on an exam tab that was opened BEFORE the student joined, and re-prompts when
+// the student comes back to the exam tab (switching tabs exits fullscreen).
+let currentEnrollment = null;
+
+function enforced() {
+  return fsActive && !!currentEnrollment && onExamPage(currentEnrollment.examLink);
+}
+
+function checkPrompt() {
+  if (enforced() && !document.fullscreenElement && document.visibilityState === 'visible') showPrompt();
+}
+
 async function initFullscreenLock() {
-  let enrollment, examLink;
   try {
     const store = await chrome.storage.local.get('enrollment');
-    enrollment = store.enrollment;
-    examLink = enrollment && enrollment.examLink;
+    currentEnrollment = store.enrollment || null;
   } catch (_) {
     return;
   }
-  if (!enrollment || !onExamPage(examLink)) return;
 
-  if (!document.fullscreenElement) showPrompt();
+  // Joined / left while this page was already open.
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !changes.enrollment) return;
+    currentEnrollment = changes.enrollment.newValue || null;
+    if (currentEnrollment) {
+      fsActive = true; // a new join re-arms the lock after an earlier Finish
+      checkPrompt();
+    } else {
+      fsActive = false;
+      hidePrompt();
+      try {
+        if (navigator.keyboard && navigator.keyboard.unlock) navigator.keyboard.unlock();
+      } catch (_) {}
+    }
+  });
+
+  // Back on the exam tab (tab switch, window restore) → prompt again.
+  document.addEventListener('visibilitychange', checkPrompt);
 
   // A short Esc while locked in fullscreen prompts instead of exiting.
   document.addEventListener('keydown', (e) => {
-    if (fsActive && e.key === 'Escape' && document.fullscreenElement) {
+    if (enforced() && e.key === 'Escape' && document.fullscreenElement) {
       e.preventDefault();
       showPrompt();
     }
   });
 
   document.addEventListener('fullscreenchange', () => {
-    if (!fsActive) return;
+    if (!enforced()) return;
     if (document.fullscreenElement) {
       hidePrompt();
     } else {
@@ -195,7 +222,45 @@ async function initFullscreenLock() {
       showPrompt();
     }
   });
+
+  checkPrompt();
 }
+
+// ---------- On-page violation warning ----------
+//
+// The background worker asks the active tab to show this after a counted
+// violation (when the exam has "Notify students" on). Drawn in the page, so it
+// is visible even when the operating system suppresses desktop notifications.
+
+let warnBanner = null;
+let warnTimer = null;
+
+function showWarning(text) {
+  if (!warnBanner) {
+    warnBanner = document.createElement('div');
+    warnBanner.id = '__proctor_warning';
+    warnBanner.setAttribute(
+      'style',
+      'position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:2147483647;' +
+        'max-width:min(560px,calc(100vw - 32px));padding:14px 20px;border-radius:10px;' +
+        'background:#b91c1c;color:#fff;font:600 16px/1.4 system-ui,-apple-system,sans-serif;' +
+        'box-shadow:0 8px 24px rgba(0,0,0,.35);text-align:center;pointer-events:none;',
+    );
+    (document.body || document.documentElement).appendChild(warnBanner);
+  }
+  warnBanner.textContent = text;
+  warnBanner.style.display = 'block';
+  clearTimeout(warnTimer);
+  warnTimer = setTimeout(() => (warnBanner.style.display = 'none'), 8000);
+}
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg && msg.type === '__proctor_warning') {
+    showWarning(msg.text);
+    sendResponse({ shown: true });
+  }
+  return false;
+});
 
 // document_start can run before <body>; wait for the DOM if needed.
 if (document.body) initFullscreenLock();

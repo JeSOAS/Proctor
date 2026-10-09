@@ -113,8 +113,14 @@ Labels live in `backend/src/exams/csv-export.ts`, copied from the dashboard's
 
 - **Fullscreen lock:** on the exam page a blocking overlay requires fullscreen;
   leaving it re-prompts and logs `FULLSCREEN_EXIT`.
-- **Notify students** (per-exam toggle): a desktop notification on each flagged
-  action ("Warning N of M"). Requires the updated extension.
+- **Notify students** (per-exam toggle): on each counted violation the student
+  sees a red banner at the top of the page they are on ("Proctor warning: That
+  action was flagged. Warning N of M.") **and** a desktop notification. The
+  banner is drawn by the content script, so it works even when Windows/macOS
+  suppress notifications; the desktop notification covers pages where content
+  scripts can't run (`chrome://`, the Web Store). Requires extension 1.2.2+.
+- **Fullscreen prompt** re-appears whenever the exam tab becomes visible again
+  and also on an exam tab that was opened before the student joined (1.2.2+).
 - **Auto-close on limit** (per-exam toggle): the session ends server-side at the
   warning limit; works even with the older extension (it gets a 404 and stops).
 
