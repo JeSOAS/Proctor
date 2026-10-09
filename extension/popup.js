@@ -108,6 +108,7 @@ async function join() {
         joinedAt: Date.now(),
       },
     });
+    chrome.storage.session.remove('joinDraft'); // joined — the draft is no longer needed
     // Fresh join → the "exam opened" marker hasn't fired yet this session.
     await chrome.storage.local.remove('examStartedReported');
     // Wake the worker so monitoring + heartbeat start right away
@@ -139,6 +140,20 @@ async function leave() {
 }
 
 $('join').addEventListener('click', join);
+
+// Keep what the student typed if the popup closes before they join (it closes
+// whenever they click elsewhere). Kept in chrome.storage.session, which Chrome
+// clears when the browser closes; cleared on a successful join.
+const DRAFT_FIELDS = ['name', 'studentId', 'code'];
+chrome.storage.session.get('joinDraft').then(({ joinDraft }) => {
+  for (const f of DRAFT_FIELDS) if (joinDraft && joinDraft[f] && !$(f).value) $(f).value = joinDraft[f];
+});
+for (const f of DRAFT_FIELDS) {
+  $(f).addEventListener('input', () => {
+    const joinDraft = Object.fromEntries(DRAFT_FIELDS.map((k) => [k, $(k).value]));
+    chrome.storage.session.set({ joinDraft });
+  });
+}
 $('open-exam').addEventListener('click', openExam);
 $('open-settings').addEventListener('click', () =>
   chrome.tabs.create({ url: `chrome://extensions/?id=${chrome.runtime.id}` }),
