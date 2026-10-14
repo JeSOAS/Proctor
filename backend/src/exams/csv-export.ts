@@ -1,11 +1,11 @@
 // Builds the exam CSV exports so they read like the dashboard.
 //
 // The labels below are copied from dashboard/src/ui.tsx (EVENT_LABELS and
-// endedReasonLabel) and the log logic mirrors buildLogRows in
-// dashboard/src/components/SessionsPanel.tsx. Keep them in sync when either
-// side changes.
+// endedReasonLabel); keep them in sync. The rows themselves come from
+// common/timeline.ts, which also feeds the dashboard's per-student log.
 
 import { classify, ClassifiableEvent } from '../common/concerning';
+import { buildTimeline, fmtGap } from '../common/timeline';
 
 const EVENT_LABELS: Record<string, string> = {
   TAB_NAVIGATE: 'Opened a page',
@@ -29,6 +29,9 @@ const EVENT_LABELS: Record<string, string> = {
   ID_CONFLICT: 'Someone else tried to join with this ID',
   NAME_MISMATCH: 'Re-joined with a different name',
   INCOGNITO_DISABLED: 'Turned off Proctor in incognito',
+  LEFT_CHROME: 'Left Chrome (did not return)',
+  EXTENSION_SETTINGS: 'Opened extension settings',
+  INCOGNITO_WINDOW: 'Opened an incognito window',
 };
 const eventLabel = (type: string) => EVENT_LABELS[type] || type;
 
@@ -51,12 +54,6 @@ export function endedReasonLabel(reason?: string | null): string {
   }
 }
 
-const fmtGap = (sec: number) => {
-  if (sec < 60) return `${sec}s`;
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return s ? `${m}m ${s}s` : `${m}m`;
-};
 
 /// "2026-09-17 09:20:05" in the given IANA time zone (spreadsheets parse it as
 /// a date-time). Falls back to UTC for a missing/unknown zone.
@@ -80,7 +77,11 @@ function timeFormatter(tz?: string) {
 
 function toCsv(rows: unknown[][]): string {
   const esc = (v: unknown) => {
-    const s = v == null ? '' : String(v);
+    let s = v == null ? '' : String(v);
+    // CSV formula injection: Excel runs a cell that starts with = + - @ (or a
+    // tab / carriage return) as a formula. Names are typed by students, so such
+    // cells get a leading apostrophe and are shown as plain text.
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
     return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   };
   // BOM so Excel opens it as UTF-8 (Thai and other non-Latin names).
@@ -96,16 +97,10 @@ type SessionWithEvents = {
   violations: (ClassifiableEvent & { payload: string | null })[];
 };
 
-const parsePayload = (p: string | null): any => {
-  try {
-    return p ? JSON.parse(p) : null;
-  } catch {
-    return null;
-  }
-};
-
-/// Full log: one readable row per event, framed by "Joined" / "Ended" rows,
-/// with window blur+focus merged into "Away from Chrome for …" as on screen.
+/// Full log: one readable row per event, as in the dashboard's per-student log
+/// (common/timeline.ts), framed by "Joined" (always first) and "Ended" (always
+/// last). Event times come from the student's clock and the join/end times from
+/// the server's, so a slightly slow laptop must not put events before the join.
 export function buildLogCsv(
   sessions: SessionWithEvents[],
   opts: { examLink: string | null; awayGraceSec?: number | null },
@@ -115,54 +110,14 @@ export function buildLogCsv(
   const rows: unknown[][] = [[`Time (${zone})`, 'Student', 'Student ID', 'Event', 'Details', 'Counts as violation']];
   for (const s of sessions) {
     const who = [s.studentName, s.studentId ?? ''];
-    const r = classify(s.violations, opts);
-    const counts = (id: number) =>
-      r.concerning.has(id) ? 'Yes' : r.postSubmission.has(id) ? 'No (after submitting)' : 'No';
-    // Collected per student and sorted by time before writing: a merged "Away
-    // from Chrome" row is only known when the student returns, but belongs at
-    // the moment they left. (sort is stable, so equal times keep their order.)
-    const mine: { at: Date; cells: unknown[] }[] = [];
-    const add = (at: Date, event: string, details: string, count: string) =>
-      mine.push({ at, cells: [fmt(at), ...who, event, details, count] });
-
-    if (s.endedReason !== 'NO_SESSION') add(s.startedAt, 'Joined the exam', '', '');
-    let pendingBlur: (typeof s.violations)[number] | null = null;
-    for (const v of s.violations) {
-      const payload = parsePayload(v.payload);
-      switch (v.type) {
-        case 'WINDOW_BLUR':
-          pendingBlur = v;
-          break;
-        case 'WINDOW_FOCUS':
-          if (pendingBlur) {
-            const secs = Math.round((v.occurredAt.getTime() - pendingBlur.occurredAt.getTime()) / 1000);
-            add(pendingBlur.occurredAt, `Away from Chrome for ${fmtGap(secs)}`, pendingBlur.url || '', counts(pendingBlur.id));
-            pendingBlur = null;
-          }
-          break;
-        case 'ID_CONFLICT':
-          add(v.occurredAt, eventLabel(v.type), `name entered: "${payload?.attemptedName ?? '?'}"`, counts(v.id));
-          break;
-        case 'NAME_MISMATCH':
-          add(v.occurredAt, eventLabel(v.type), `name entered: "${payload?.typedName ?? '?'}"`, counts(v.id));
-          break;
-        case 'LONG_DISCONNECT':
-        case 'RECONNECT':
-          add(v.occurredAt, eventLabel(v.type), payload?.seconds != null ? `offline ${fmtGap(payload.seconds)}` : '', counts(v.id));
-          break;
-        default: {
-          const ext = /^(chrome|edge):\/\/extensions/i.test(v.url || '');
-          const label = ext ? 'Opened extension settings'
-            : v.type === 'NEW_WINDOW' && payload?.incognito ? 'Opened an incognito window'
-              : eventLabel(v.type);
-          add(v.occurredAt, label, v.url || '', counts(v.id));
-        }
-      }
+    const timeline = buildTimeline(s.violations, classify(s.violations, opts), opts);
+    if (s.endedReason !== 'NO_SESSION') rows.push([fmt(s.startedAt), ...who, 'Joined the exam', '', '']);
+    for (const e of timeline) {
+      const label = e.kind === 'AWAY' ? `Away from Chrome for ${fmtGap(e.seconds ?? 0)}` : eventLabel(e.kind);
+      const counts = e.concerning ? 'Yes' : e.postSubmission ? 'No (after submitting)' : 'No';
+      rows.push([fmt(e.at), ...who, label, e.detail, counts]);
     }
-    if (pendingBlur) add(pendingBlur.occurredAt, 'Left Chrome (did not return)', pendingBlur.url || '', counts(pendingBlur.id));
-    if (s.endedAt) add(s.endedAt, `Ended: ${endedReasonLabel(s.endedReason)}`, '', '');
-    mine.sort((a, b) => a.at.getTime() - b.at.getTime());
-    for (const m of mine) rows.push(m.cells);
+    if (s.endedAt) rows.push([fmt(s.endedAt), ...who, `Ended: ${endedReasonLabel(s.endedReason)}`, '', '']);
   }
   return toCsv(rows);
 }

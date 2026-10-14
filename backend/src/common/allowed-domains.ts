@@ -11,7 +11,14 @@ import { join } from 'path';
 // "docs.google.com/forms" — matches ONLY /forms..., so Google Docs/Sheets on
 // the same host are NOT whitelisted). The AI list is host-only.
 
-const DEFAULT_ALLOWED = ['accounts.google.com', 'docs.google.com/forms', 'forms.gle', 'chromewebstore.google.com'];
+const DEFAULT_ALLOWED = [
+  'accounts.google.com',
+  'docs.google.com/forms',
+  'forms.gle',
+  'chromewebstore.google.com',
+  'www.google.com/a',
+  'home.au.edu',
+];
 
 const DEFAULT_AI = [
   'chatgpt.com',
@@ -95,6 +102,22 @@ export function aiDomains(): string[] {
 /** True if the host+path is allowed by the (path-aware) whitelist. */
 export function isAllowedUrl(host: string | undefined | null, pathname: string): boolean {
   return allowedRules().some((r) => ruleMatches(r, host, pathname));
+}
+
+/** Drop the query string and fragment of a URL on the allowed list (sign-in
+ *  pages, the form): they carry sign-in tokens and request data, never evidence.
+ *  Other URLs are kept whole, e.g. the search words of a search engine. */
+export function minimiseUrl(url: unknown): unknown {
+  if (typeof url !== 'string') return url;
+  try {
+    const u = new URL(url);
+    if ((u.protocol === 'http:' || u.protocol === 'https:') && isAllowedUrl(u.host, u.pathname || '/')) {
+      return u.origin + u.pathname;
+    }
+  } catch {
+    /* not a URL — keep as is */
+  }
+  return url;
 }
 
 /** True if `host` is (or is a subdomain of) a known AI tool. */

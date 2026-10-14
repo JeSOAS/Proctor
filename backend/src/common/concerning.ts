@@ -14,6 +14,11 @@ function isTamperPage(url: string | null): boolean {
   return u.startsWith('chrome://extensions') || u.startsWith('edge://extensions');
 }
 
+// Google Forms' "Your response has been recorded" page, shown after submitting.
+export function isSubmissionPage(host?: string, pathname?: string): boolean {
+  return !!host && host.toLowerCase() === 'docs.google.com' && !!pathname && pathname.includes('/formResponse');
+}
+
 // Parse an event payload (stored as a JSON string, or already an object).
 function payloadOf(payload: unknown): Record<string, unknown> | null {
   if (payload == null) return null;
@@ -30,6 +35,15 @@ function gapSeconds(payload: unknown): number {
   const s = payloadOf(payload)?.seconds;
   return typeof s === 'number' && s > 0 ? s : 0;
 }
+
+// Activity that can only happen in Chrome. It ends a pending absence even when
+// Chrome never reported the window regaining focus (it can miss it, e.g. after a
+// sign-in prompt), so the student is not counted as away while visibly working.
+// Page loads (TAB_NAVIGATE) are left out: redirects can happen on their own.
+// Events within RETURN_GRACE_MS of leaving are part of leaving (Chrome can switch
+// tabs a moment after losing focus), so they do not end the absence.
+const RETURN_EVENTS = new Set(['TAB_SWITCH', 'TAB_CREATED', 'TAB_CLOSED', 'NEW_WINDOW', 'COPY', 'CUT', 'PASTE', 'EXAM_SUBMITTED']);
+const RETURN_GRACE_MS = 2_000;
 
 // Browser-internal pages are never a violation — opening a new tab lands on one.
 const ALLOWED_SCHEMES = new Set([
@@ -73,6 +87,10 @@ export interface ClassifyResult {
   tamperIntent: boolean;
   /** Total seconds the student was disconnected but returned — "unaccounted" time. */
   unaccountedSec: number;
+  /** Length in seconds of every absence from Chrome that ended (key = WINDOW_BLUR id). */
+  awaySeconds: Map<number, number>;
+  /** Event that ended an absence → the WINDOW_BLUR it ended (for warning on return). */
+  closesAbsence: Map<number, number>;
 }
 
 /** Extract a bare host from a domain OR a full URL a teacher typed as the exam link. */
@@ -106,7 +124,7 @@ function parse(url: string | null): {
 // Scope the exam link to host + its first path segment, so setting the exam link
 // to a Google Form (docs.google.com/forms/...) whitelists /forms — NOT all of
 // docs.google.com (which would re-open the saved-Doc loophole).
-function examLinkRule(examLink: string | null | undefined): DomainRule | null {
+export function examLinkRule(examLink: string | null | undefined): DomainRule | null {
   const host = hostOf(examLink);
   if (!host) return null;
   let firstSeg = '';
@@ -153,6 +171,8 @@ export function classify(
   let unaccountedSec = 0;
   let lastNavHostPath: string | undefined;
   let pendingBlur: ClassifiableEvent | null = null;
+  const awaySeconds = new Map<number, number>();
+  const closesAbsence = new Map<number, number>();
 
   // Once the student has submitted, later events are recorded but never counted
   // — they've finished, so it isn't cheating. flag() routes accordingly.
@@ -177,7 +197,23 @@ export function classify(
     if (examRule && ruleMatches(examRule, host, pathname || '/')) visitedExamLink = true;
   };
 
+  // End the pending absence at `ev`; it counts if it lasted the exam's allowance.
+  const endAbsence = (ev: ClassifiableEvent) => {
+    if (!pendingBlur) return;
+    const away = ev.occurredAt.getTime() - pendingBlur.occurredAt.getTime();
+    awaySeconds.set(pendingBlur.id, Math.max(0, Math.round(away / 1000)));
+    closesAbsence.set(ev.id, pendingBlur.id);
+    if (away >= blurMs) flag(pendingBlur.id);
+    pendingBlur = null;
+  };
+
   for (const ev of events) {
+    if (
+      pendingBlur && RETURN_EVENTS.has(ev.type) &&
+      ev.occurredAt.getTime() - pendingBlur.occurredAt.getTime() >= RETURN_GRACE_MS
+    ) {
+      endAbsence(ev);
+    }
     switch (ev.type) {
       case 'EXAM_STARTED':
         if (!examStartedAt) examStartedAt = ev.occurredAt;
@@ -195,11 +231,7 @@ export function classify(
         break;
 
       case 'WINDOW_FOCUS':
-        if (pendingBlur) {
-          const away = ev.occurredAt.getTime() - pendingBlur.occurredAt.getTime();
-          if (away >= blurMs) flag(pendingBlur.id);
-          pendingBlur = null;
-        }
+        endAbsence(ev);
         break;
 
       case 'TAB_NAVIGATE':
@@ -261,9 +293,20 @@ export function classify(
         idle = true; // recorded + badged, but never counted (student's own call)
         break;
 
-      case 'FULLSCREEN_EXIT':
+      case 'FULLSCREEN_EXIT': {
+        // Fullscreen also ends by itself when the exam tab navigates to another
+        // site, e.g. the sign-in redirect of a university Google account. Ending
+        // up on an allowed sign-in page is not a violation; leaving fullscreen on
+        // the exam page itself, or for a site that is not allowed, still counts.
+        const { host, pathname } = parse(ev.url);
+        // Submitting the form loads its "response recorded" page, which ends
+        // fullscreen too: that is finishing the exam, not leaving it.
+        if (isSubmissionPage(host, pathname)) break;
+        const onExamPage = !!examRule && ruleMatches(examRule, host, pathname || '/');
+        if (ev.url && !onExamPage && isAllowedUrl(host, pathname || '/')) break;
         flag(ev.id); // left the locked fullscreen during the exam — counts
         break;
+      }
 
       default:
         break; // TAB_CLOSED / WINDOW_FOCUS / REJOIN etc. are never concerning
@@ -285,6 +328,8 @@ export function classify(
     reconnectCount,
     tamperIntent,
     unaccountedSec,
+    awaySeconds,
+    closesAbsence,
   };
 }
 

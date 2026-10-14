@@ -176,7 +176,7 @@ export class ExamsService implements OnModuleInit, OnModuleDestroy {
       ? await this.prisma.violation.findMany({
           where: { sessionId: { in: ids } },
           select: { id: true, sessionId: true, type: true, url: true, payload: true, occurredAt: true },
-          orderBy: { occurredAt: 'asc' },
+          orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
         })
       : [];
     const bySession = new Map<string, typeof events>();
@@ -229,7 +229,7 @@ export class ExamsService implements OnModuleInit, OnModuleDestroy {
     const sessions = await this.prisma.studentSession.findMany({
       where: { examId },
       orderBy: { startedAt: 'asc' },
-      include: { violations: { orderBy: { occurredAt: 'asc' } } },
+      include: { violations: { orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }] } },
     });
     return { filename: `${base} - full log.csv`, csv: buildLogCsv(sessions, { examLink: exam.examLink, awayGraceSec: exam.awayGraceSec }, tz) };
   }

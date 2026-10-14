@@ -240,6 +240,10 @@ const EVENT_LABELS: Record<string, string> = {
   ID_CONFLICT: 'Someone else tried to join with this ID',
   NAME_MISMATCH: 'Re-joined with a different name',
   INCOGNITO_DISABLED: 'Turned off Proctor in incognito',
+  // Display kinds from the backend timeline (common/timeline.ts)
+  LEFT_CHROME: 'Left Chrome (did not return)',
+  EXTENSION_SETTINGS: 'Opened extension settings',
+  INCOGNITO_WINDOW: 'Opened an incognito window',
 };
 export function eventLabel(type: string): string {
   return EVENT_LABELS[type] || type;
@@ -269,6 +273,10 @@ const EVENT_HELP: Record<string, string> = {
   NAME_MISMATCH: 'This ID was used to re-join under a different name. The original name was kept.',
   INCOGNITO_DISABLED:
     'The student switched off "Allow in Incognito" for Proctor during the exam, so incognito windows were no longer monitored.',
+  AWAY: 'The student left the Chrome window, e.g. switched to another app or screen, and came back.',
+  LEFT_CHROME: 'The student left the Chrome window and did not come back before the session ended.',
+  EXTENSION_SETTINGS: 'Opened the browser extensions page during the exam, where the extension could be disabled.',
+  INCOGNITO_WINDOW: 'The student opened a private (incognito) window during the exam.',
 };
 export function eventHelp(type: string): string {
   return EVENT_HELP[type] || 'Recorded activity.';

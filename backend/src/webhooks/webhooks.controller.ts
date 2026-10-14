@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Headers, Post, UnauthorizedException } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
+import { safeEqual } from '../common/safe-equal';
 import { WebhooksService } from './webhooks.service';
 
 // Open endpoint called by the Google Forms Apps Script on each submission,
@@ -12,7 +13,7 @@ export class WebhooksController {
 
   private assertSecret(secret: string) {
     const expected = process.env.WEBHOOK_SECRET;
-    if (!expected || secret !== expected) {
+    if (!expected || !safeEqual(secret, expected)) {
       throw new UnauthorizedException('invalid or unconfigured webhook secret');
     }
   }

@@ -4,6 +4,7 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import { safeEqual } from './safe-equal';
 
 /// Protects the administrator endpoints: creating teacher accounts
 /// (POST /auth/register) and the dev wipe (DELETE /exams). Requires a matching
@@ -18,7 +19,7 @@ export class AdminGuard implements CanActivate {
 
     const req = context.switchToHttp().getRequest();
     const provided = req.headers['x-admin-token'];
-    if (provided !== required) {
+    if (!safeEqual(provided, required)) {
       throw new UnauthorizedException('Invalid or missing admin token');
     }
     return true;

@@ -31,3 +31,10 @@ docs.google.com/forms        # Google Forms ONLY — not Docs, Sheets, or Slides
 forms.gle                    # short links that redirect to a Google Form
 chromewebstore.google.com    # installing/checking the Proctor extension right after joining
                              # (17 false violations in the 17 Sep trial)
+www.google.com/a             # Google Workspace single sign-on for a university domain
+                             # (e.g. /a/au.edu/acs) — NOT /search, which stays a violation
+home.au.edu                  # Assumption University sign-in portal (SAML) that au.edu Google
+                             # accounts are sent through when signing in to the exam form
+                             # (4 false violations in the 14 Oct defence exam). Whole host,
+                             # because the SAML request arrives on "/" with a query string.
+                             # Replace with your own university's sign-in host if you fork.

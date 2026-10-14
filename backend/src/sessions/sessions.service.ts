@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { classify } from '../common/concerning';
+import { minimiseUrl } from '../common/allowed-domains';
+import { buildTimeline } from '../common/timeline';
 
 // The extension heartbeats every 30s. An ACTIVE session with no beat for this
 // long is marked DISCONNECTED (network drop / sleep / extension off / browser
@@ -47,12 +49,22 @@ export class SessionsService {
       throw new BadRequestException('"type" is required');
     }
     await this.touchSession(sessionId);
+    // Sign-in and form URLs lose their query string before storage (tokens).
+    const payload =
+      input.payload && typeof input.payload === 'object'
+        ? { ...(input.payload as Record<string, unknown>) }
+        : input.payload;
+    if (payload && typeof payload === 'object') {
+      const p = payload as Record<string, unknown>;
+      if ('url' in p) p.url = minimiseUrl(p.url);
+      if ('from' in p) p.from = minimiseUrl(p.from);
+    }
     const created = await this.prisma.violation.create({
       data: {
         sessionId,
         type: input.type,
-        url: input.url,
-        payload: input.payload != null ? JSON.stringify(input.payload) : null,
+        url: minimiseUrl(input.url) as string | undefined,
+        payload: payload != null ? JSON.stringify(payload) : null,
         occurredAt: input.occurredAt ? new Date(input.occurredAt) : undefined,
       },
     });
@@ -77,7 +89,7 @@ export class SessionsService {
     const events = await this.prisma.violation.findMany({
       where: { sessionId },
       select: { id: true, type: true, url: true, payload: true, occurredAt: true },
-      orderBy: { occurredAt: 'asc' },
+      orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
     });
     const r = classify(events, { examLink: exam.examLink, awayGraceSec: exam.awayGraceSec });
     const maxWarnings = exam.maxWarnings;
@@ -85,24 +97,14 @@ export class SessionsService {
     // Leaving Chrome (WINDOW_BLUR) only counts if the student stays away for the
     // exam's allowance, which is known when they come back. So a blur never warns
     // or auto-closes (the classifier counts a still-open blur provisionally), and
-    // the returning WINDOW_FOCUS warns if the absence it closes was counted.
+    // the event that ends the absence (returning focus, or the first activity in
+    // Chrome) warns if that absence was counted.
     let countsNow = r.concerning.has(created.id);
     if (input.type === 'WINDOW_BLUR') {
       countsNow = false;
-    } else if (input.type === 'WINDOW_FOCUS') {
-      // The absence this return closes = the latest WINDOW_BLUR before it with no
-      // WINDOW_FOCUS in between (other events, e.g. a fullscreen exit or idle,
-      // may be logged while the student is away).
-      const i = events.findIndex((e) => e.id === created.id);
-      let blur: (typeof events)[number] | undefined;
-      for (let k = i - 1; k >= 0; k--) {
-        if (events[k].type === 'WINDOW_FOCUS') break;
-        if (events[k].type === 'WINDOW_BLUR') {
-          blur = events[k];
-          break;
-        }
-      }
-      countsNow = !!blur && r.concerning.has(blur.id);
+    } else {
+      const blurId = r.closesAbsence.get(created.id);
+      if (blurId !== undefined && r.concerning.has(blurId)) countsNow = true;
     }
     const concerningCount = input.type === 'WINDOW_BLUR'
       ? r.concerning.size - (r.concerning.has(created.id) ? 1 : 0) // exclude the provisional blur
@@ -135,23 +137,17 @@ export class SessionsService {
     const [violations, session] = await Promise.all([
       this.prisma.violation.findMany({
         where: { sessionId },
-        orderBy: { occurredAt: 'asc' },
+        orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
       }),
       this.prisma.studentSession.findUnique({
         where: { id: sessionId },
         select: { exam: { select: { examLink: true, awayGraceSec: true } } },
       }),
     ]);
-    // Annotate each row with whether it counts as a warning and whether it
-    // happened after submission, using the same classifier (and exam link) as
-    // the count — so the dashboard mirrors it exactly.
-    const r = classify(violations, { examLink: session?.exam?.examLink, awayGraceSec: session?.exam?.awayGraceSec });
-    return violations.map((v) => ({
-      ...v,
-      payload: v.payload ? JSON.parse(v.payload) : null,
-      concerning: r.concerning.has(v.id),
-      postSubmission: r.postSubmission.has(v.id),
-    }));
+    // The readable timeline (same builder as the full-log CSV), each row marked
+    // with whether it counts and whether it happened after submission.
+    const opts = { examLink: session?.exam?.examLink, awayGraceSec: session?.exam?.awayGraceSec };
+    return buildTimeline(violations, classify(violations, opts), opts);
   }
 
   async getSession(teacherId: string, id: string) {

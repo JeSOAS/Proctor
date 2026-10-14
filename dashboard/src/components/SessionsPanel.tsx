@@ -35,92 +35,31 @@ const range = (a?: string, b?: string) => {
 };
 type LogRow = {
   key: string;
-  at: number; // ms timestamp, for ordering
   label: string;
   time: string;
-  detail: string; // full URL for tab activity (shown in full, on purpose)
+  detail: string; // shortened URL or other detail; the full URL is in `url`
+  url: string | null;
   help: string;
   concerning: boolean;
   postSubmission: boolean;
   tone: 'exam' | 'plain';
 };
 
-// Turn raw events into readable rows: merge each window blur with the focus that
-// follows it into one "Away from Chrome for X" line, label everything in plain
-// English, keep the full URL for tab activity, and carry the flags for display.
-// Rows are sorted by time: an "away" row is only known when the student returns,
-// but belongs at the moment they left. (Mirrored by backend csv-export.ts.)
-function buildLogRows(violations: any[]): LogRow[] {
-  const rows: LogRow[] = [];
-  let pendingBlur: any = null;
-
-  const push = (v: any, detail: string, tone: LogRow['tone'], label = eventLabel(v.type), help = eventHelp(v.type)) =>
-    rows.push({
-      key: String(v.id),
-      at: new Date(v.occurredAt).getTime(),
-      label,
-      time: new Date(v.occurredAt).toLocaleTimeString(),
-      detail,
-      help,
-      concerning: !!v.concerning,
-      postSubmission: !!v.postSubmission,
-      tone,
-    });
-
-  const away = (blur: any, secs?: number) =>
-    push(
-      blur,
-      blur.url || '',
-      'plain',
-      secs == null ? 'Left Chrome (did not return)' : `Away from Chrome for ${fmtDur(secs)}`,
-      eventHelp('WINDOW_BLUR'),
-    );
-
-  for (const v of violations) {
-    switch (v.type) {
-      case 'WINDOW_BLUR':
-        pendingBlur = v;
-        break;
-      case 'WINDOW_FOCUS':
-        if (pendingBlur) {
-          const secs = Math.round(
-            (new Date(v.occurredAt).getTime() - new Date(pendingBlur.occurredAt).getTime()) / 1000,
-          );
-          away(pendingBlur, secs);
-          pendingBlur = null;
-        }
-        break;
-      case 'EXAM_STARTED':
-      case 'EXAM_SUBMITTED':
-      case 'SUBMISSION_CONFIRMED':
-      case 'REJOIN':
-        push(v, v.url || '', 'exam');
-        break;
-      case 'ID_CONFLICT':
-        push(v, `name entered: "${v.payload?.attemptedName ?? '?'}"`, 'plain');
-        break;
-      case 'NAME_MISMATCH':
-        push(v, `name entered: "${v.payload?.typedName ?? '?'}"`, 'plain');
-        break;
-      case 'LONG_DISCONNECT':
-      case 'RECONNECT':
-        push(v, v.payload?.seconds != null ? `offline ${fmtDur(v.payload.seconds)}` : '', 'plain');
-        break;
-      default:
-        if (/^(chrome|edge):\/\/extensions/i.test(v.url || '')) {
-          push(v, v.url || '', 'plain', 'Opened extension settings',
-            'Opened the browser extensions page during the exam, where the extension could be disabled.');
-        } else if (v.type === 'NEW_WINDOW' && v.payload?.incognito) {
-          push(v, v.url || '', 'plain', 'Opened an incognito window',
-            'The student opened a private (incognito) window during the exam.');
-        } else {
-          // Tab activity + clipboard: the FULL URL, so teachers see exactly which page.
-          push(v, v.url || '', 'plain');
-        }
-    }
-  }
-  if (pendingBlur) away(pendingBlur);
-  return rows.sort((x, y) => x.at - y.at);
+// Timeline entries from GET /sessions/:id/violations (built by the backend's
+// common/timeline.ts, the same rows as the full-log CSV) → display rows.
+const EXAM_KINDS = new Set(['EXAM_STARTED', 'EXAM_SUBMITTED', 'SUBMISSION_CONFIRMED', 'REJOIN']);
+function buildLogRows(entries: any[]): LogRow[] {
+  return entries.map((e) => ({
+    key: String(e.id),
+    label: e.kind === 'AWAY' ? `Away from Chrome for ${fmtDur(e.seconds ?? 0)}` : eventLabel(e.kind),
+    time: new Date(e.at).toLocaleTimeString(),
+    detail: e.detail || '',
+    url: e.url ?? null,
+    help: eventHelp(e.kind),
+    concerning: !!e.concerning,
+    postSubmission: !!e.postSubmission,
+    tone: EXAM_KINDS.has(e.kind) ? 'exam' : 'plain',
+  }));
 }
 
 export function SessionsPanel({ exam: navExam }: { exam: any }) {
@@ -427,7 +366,7 @@ export function SessionsPanel({ exam: navExam }: { exam: any }) {
                           {row.label}
                         </span>
                         {row.detail && (
-                          <span className="text-gray-500 dark:text-gray-400 break-all"> — {row.detail}</span>
+                          <span className="text-gray-500 dark:text-gray-400 break-all" title={row.url || undefined}> — {row.detail}</span>
                         )}
                       </span>
                       {row.postSubmission && (
