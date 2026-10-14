@@ -53,7 +53,7 @@ curl -X POST $BASE/exams/<CODE>/register -H "Content-Type: application/json" -d 
 
 # --- sessions ---
 curl $BASE/sessions/<SESSION_ID> -H "$AUTH"                      # read (teacher)
-curl $BASE/sessions/<SESSION_ID>/violations -H "$AUTH"           # events (teacher)
+curl $BASE/sessions/<SESSION_ID>/violations -H "$AUTH"           # readable event timeline (teacher)
 curl -X PATCH $BASE/sessions/<SESSION_ID> -H "Content-Type: application/json" -H "$AUTH" -d '{"status":"ENDED"}'
 curl -X DELETE $BASE/sessions/<SESSION_ID> -H "$AUTH"
 curl -X POST $BASE/sessions/<SESSION_ID>/end                     # student leave (open)

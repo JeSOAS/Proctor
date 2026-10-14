@@ -34,7 +34,9 @@ so the raw log is never altered and rules can be re-tuned without re-collecting.
   site that is **not** whitelisted, opening the extensions page
   (`chrome://extensions`), a significant disconnect, or leaving fullscreen.
 - **Minor / info (recorded, never counts):** a window blur shorter than
-  the exam's **away-from-Chrome allowance** (default 30 s), a blank/new tab, a whitelisted or
+  the exam's **away-from-Chrome allowance** (default 30 s; an absence ends when focus
+  returns or at the first activity in Chrome 2 s or more after leaving, since Chrome can
+  miss the focus event), a blank/new tab, a whitelisted or
   browser-internal page, a query-only re-navigation of the same page, going
   idle, brief reconnects.
 
@@ -51,6 +53,11 @@ The exam's own link is auto-whitelisted, scoped to its path. `ai-domains.txt`
 lists AI tools (host-only). Both are plain text, loaded at startup — edit and
 restart to apply. `chromewebstore.google.com` is listed because students open
 the store to install or check the extension right after joining.
+`www.google.com/a` (Google Workspace single sign-on, not `/search`) and
+`home.au.edu` (the university's SAML sign-in portal) are listed because signing
+in to the exam form with a university Google account passes through them (4 false
+violations in the 14 Oct defence exam). A fork for another university replaces
+`home.au.edu` with its own sign-in host.
 
 ## 4. Session & exam lifecycle
 
@@ -129,15 +136,20 @@ Labels live in `backend/src/exams/csv-export.ts`, copied from the dashboard's
 ## 6. Enforcement & student-facing
 
 - **Fullscreen lock:** on the exam page a blocking overlay requires fullscreen;
-  leaving it re-prompts and logs `FULLSCREEN_EXIT`.
+  leaving it re-prompts and logs `FULLSCREEN_EXIT`. It counts, except when the
+  exam tab navigated to an allowed page (fullscreen ends by itself on the
+  sign-in redirect); leaving it on the exam page or for any other site counts.
 - **Notify students** (per-exam toggle): on each counted violation the student
   sees a red banner at the top of the page they are on ("Proctor warning: That
   action was flagged. Warning N of M.") **and** a desktop notification. The
-  banner is drawn by the content script, so it works even when Windows/macOS
+  banner is injected into the page by the background worker, so it works even when Windows/macOS
   suppress notifications; the desktop notification covers pages where content
   scripts can't run (`chrome://`, the Web Store). Requires extension 1.2.2+.
 - **Fullscreen prompt** re-appears whenever the exam tab becomes visible again
   and also on an exam tab that was opened before the student joined (1.2.2+).
+  It stops once the exam is submitted: the "response recorded" page and any exam
+  page opened afterwards are not locked, until the next join (1.2.3+). The
+  fullscreen exit caused by submitting is not counted.
 - **Auto-close on limit** (per-exam toggle): the session ends server-side at the
   warning limit; works even with the older extension (it gets a 404 and stops).
 

@@ -143,6 +143,17 @@ State these plainly so results aren't misread:
 - [ ] Turn *Allow in Incognito* **off** mid-exam → "Turned off Proctor in incognito" (counted) and the 🛠 badge.
 - [ ] Exam without an exam link → no tab opens; no *Open exam* button.
 
+## 14. Extension 1.2.3 and the 14 Oct fixes
+
+- [ ] Submit the form → the "Your response has been recorded" page is **not** locked in fullscreen; "Edit your response" is not locked either; no counted "Left fullscreen" at submission.
+- [ ] Join again (new join) → the exam page asks for fullscreen again.
+- [ ] Sign in to the form with a university Google account during the exam → the sign-in pages (accounts.google.com, home.au.edu, www.google.com/a/…) and the fullscreen exit on the way are **not** counted.
+- [ ] Open a new tab → one row "Opened a new tab" in the log (not two); a new window → one row.
+- [ ] Search on Google → log shows `www.google.com/search · searched "…"`; hovering the row shows the full URL.
+- [ ] Alt-Tab away > 30 s and come back → counted and warned; leave Chrome, then click a tab within the allowance → not counted.
+- [ ] Full log CSV: "Joined the exam" is the first row of each student and "Ended" the last; no sign-in tokens in the Details column.
+- [ ] Six wrong dashboard logins within a minute → the sixth is refused ("Too Many Requests").
+
 ## Not built — do NOT expect these in the mock
 
 - **Auto-submitting** the form on the warning limit — the session closes instead ("Reached warning limit").
