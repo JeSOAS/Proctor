@@ -106,7 +106,7 @@ async function join() {
     });
     chrome.storage.session.remove('joinDraft'); // joined — the draft is no longer needed
     // Fresh join → the "exam opened" marker hasn't fired yet this session.
-    await chrome.storage.local.remove('examStartedReported');
+    await chrome.storage.local.remove(['examStartedReported', 'examSubmitted']);
     // Wake the worker so monitoring + heartbeat start right away
     chrome.runtime.sendMessage({ type: '__proctor_enrolled' }).catch(() => {});
     await render();

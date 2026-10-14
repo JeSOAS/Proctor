@@ -33,7 +33,7 @@ async function getEnrollment() {
 }
 
 async function clearEnrollment() {
-  await chrome.storage.local.remove(['enrollment', 'examStartedReported', 'incognitoReported']);
+  await chrome.storage.local.remove(['enrollment', 'examStartedReported', 'incognitoReported', 'examSubmitted']);
   console.log('[Proctor/bg] enrollment cleared — monitoring stopped');
   // An update that arrived during the exam is applied now that it's over.
   const { updatePending } = await chrome.storage.local.get('updatePending');

@@ -13,6 +13,8 @@
 // The current enrollment, kept up to date. Nothing is reported unless the student
 // has joined an exam, so this script stays silent on every other page.
 let currentEnrollment = null;
+// Set once the exam is submitted: the fullscreen lock is then over for this join.
+let examSubmitted = false;
 
 function send(type, payload = {}) {
   if (!currentEnrollment) return;
@@ -35,10 +37,17 @@ for (const type of ['copy', 'paste', 'cut']) {
 // page ("Your response has been recorded."), a reliable "the student finished"
 // signal. Checked once the enrollment is known (see init below).
 
+function isSubmissionPage() {
+  return location.hostname === 'docs.google.com' && location.pathname.includes('/formResponse');
+}
+
 function detectGoogleFormSubmit() {
-  if (location.hostname === 'docs.google.com' && location.pathname.includes('/formResponse')) {
-    send('EXAM_SUBMITTED', { url: location.href });
-  }
+  if (!isSubmissionPage()) return;
+  send('EXAM_SUBMITTED', { url: location.href });
+  // The student has finished: stop requiring fullscreen, here and on any exam
+  // page opened afterwards (e.g. "Edit your response"), until the next join.
+  examSubmitted = true;
+  if (currentEnrollment) chrome.storage.local.set({ examSubmitted: true }).catch(() => {});
 }
 
 // ---------- Fullscreen lock + finish prompt ----------
@@ -153,7 +162,10 @@ function finishExam() {
 // the student joined, and re-prompts when they come back to the exam tab
 // (switching tabs exits fullscreen).
 function enforced() {
-  return fsActive && !!currentEnrollment && onExamPage(currentEnrollment.examLink);
+  return (
+    fsActive && !examSubmitted && !isSubmissionPage() &&
+    !!currentEnrollment && onExamPage(currentEnrollment.examLink)
+  );
 }
 
 function checkPrompt() {
@@ -162,8 +174,9 @@ function checkPrompt() {
 
 async function init() {
   try {
-    const store = await chrome.storage.local.get('enrollment');
+    const store = await chrome.storage.local.get(['enrollment', 'examSubmitted']);
     currentEnrollment = store.enrollment || null;
+    examSubmitted = !!store.examSubmitted;
   } catch (_) {
     return;
   }
@@ -171,7 +184,17 @@ async function init() {
 
   // Joined / left while this page was already open.
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local' || !changes.enrollment) return;
+    if (area !== 'local') return;
+    if (changes.examSubmitted) {
+      examSubmitted = !!changes.examSubmitted.newValue;
+      if (examSubmitted) {
+        hidePrompt();
+        try {
+          if (navigator.keyboard && navigator.keyboard.unlock) navigator.keyboard.unlock();
+        } catch (_) {}
+      }
+    }
+    if (!changes.enrollment) return;
     currentEnrollment = changes.enrollment.newValue || null;
     if (currentEnrollment) {
       fsActive = true; // a new join re-arms the lock after an earlier Finish
